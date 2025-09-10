@@ -29,7 +29,7 @@ The production infrastructure includes:
 client = S3ClientFactory.create_client()
 
 # Generate presigned URLs with validation
-url = generate_presigned_url(key, content_type, expires_in)
+url = generate_presigned_url(key, content_type, file_size, expires_in)
 ```
 
 ### 2. Enhanced Data Models

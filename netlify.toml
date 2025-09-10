@@ -1,7 +1,11 @@
 [build]
 base = "."
 command = "pnpm -w install && pnpm --filter web build"
-publish = "apps/web/.next"
+publish = "apps/web/out"
 
 [[plugins]]
 package = "@netlify/plugin-nextjs"
+
+[build.environment]
+NODE_VERSION = "18"
+NEXT_TELEMETRY_DISABLED = "1"
