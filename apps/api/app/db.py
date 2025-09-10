@@ -10,5 +10,5 @@ class Base(DeclarativeBase):
 
 def create_tables():
     # Import models inside function to avoid circular imports
-    from .models import Document, Page  # noqa
+    from .models import Document, Page, ProcessingEvent, Artifact  # noqa
     Base.metadata.create_all(bind=engine)
