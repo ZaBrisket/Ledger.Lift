@@ -1,0 +1,93 @@
+name: Netlify Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  netlify-preview:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: pnpm -w install
+      
+      - name: Build web app
+        run: pnpm --filter web build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'http://localhost:8000' }}
+      
+      - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v2.0
+        with:
+          publish-dir: './apps/web/.next'
+          production-branch: main
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy from GitHub Actions - PR #${{ github.event.pull_request.number }}"
+          enable-pull-request-comment: true
+          enable-commit-comment: true
+          overwrites-pull-request-comment: true
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+      
+      - name: Comment PR with preview URL
+        uses: actions/github-script@v7
+        if: success()
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('🚀 Deploy preview for')
+            );
+            
+            if (botComment) {
+              console.log('Found existing bot comment, updating...');
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: `🚀 **Deploy preview for PR #${{ github.event.pull_request.number }}**
+                
+                **Preview URL:** ${{ steps.netlify.outputs.url }}
+                **Commit:** \`${{ github.sha }}\`
+                **Branch:** \`${{ github.head_ref }}\`
+                
+                This preview will be updated automatically when you push new commits to this PR.
+                
+                ---
+                *Deployed by GitHub Actions*`
+              });
+            } else {
+              console.log('Creating new bot comment...');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `🚀 **Deploy preview for PR #${{ github.event.pull_request.number }}**
+                
+                **Preview URL:** ${{ steps.netlify.outputs.url }}
+                **Commit:** \`${{ github.sha }}\`
+                **Branch:** \`${{ github.head_ref }}\`
+                
+                This preview will be updated automatically when you push new commits to this PR.
+                
+                ---
+                *Deployed by GitHub Actions*`
+              });
+            }
