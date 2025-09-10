@@ -1,0 +1,11 @@
+{
+  "extends": "next/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@lib/*": ["src/lib/*"],
+      "@components/*": ["src/components/*"]
+    }
+  }
+}

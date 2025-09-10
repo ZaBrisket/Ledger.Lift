@@ -1,0 +1,6 @@
+[project]
+name = "ledger-lift-extractors"
+version = "0.1.0"
+description = "Extraction helpers (placeholder)"
+requires-python = ">=3.11"
+dependencies = []

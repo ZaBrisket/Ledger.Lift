@@ -1,0 +1,16 @@
+{
+  "name": "ledger-lift",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.6.0",
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "apps/worker",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "echo \"Use package-level linters\"",
+    "build": "echo \"Use package-level builds\""
+  }
+}
