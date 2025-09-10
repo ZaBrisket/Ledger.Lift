@@ -51,13 +51,25 @@ export function sanitizeFilename(filename: string): string {
 }
 
 /**
- * Error types for better error handling
+ * Error class for better error handling
  */
-export interface ApiError {
-  message: string;
-  code?: string;
-  status?: number;
-  details?: any;
+export class ApiError extends Error {
+  public code?: string;
+  public status?: number;
+  public details?: any;
+
+  constructor(
+    message: string,
+    code?: string,
+    status?: number,
+    details?: any
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.status = status;
+    this.details = details;
+  }
 }
 
 /**
@@ -69,7 +81,7 @@ export function createApiError(
   status?: number,
   details?: any
 ): ApiError {
-  return { message, code, status, details };
+  return new ApiError(message, code, status, details);
 }
 
 /**
