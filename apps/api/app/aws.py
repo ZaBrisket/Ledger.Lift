@@ -23,7 +23,7 @@ class S3ClientFactory:
                 config=config
             )
 
-def generate_presigned_url(key: str, content_type: str, expires_in: int = 900) -> str:
+def generate_presigned_url(key: str, content_type: str, file_size: int, expires_in: int = 900) -> str:
     client = S3ClientFactory.create_client()
     return client.generate_presigned_url(
         ClientMethod='put_object',
@@ -31,7 +31,7 @@ def generate_presigned_url(key: str, content_type: str, expires_in: int = 900) -
             'Bucket': settings.s3_bucket,
             'Key': key,
             'ContentType': content_type,
-            'ContentLength': settings.max_file_size
+            'ContentLength': file_size
         },
         ExpiresIn=expires_in
     )

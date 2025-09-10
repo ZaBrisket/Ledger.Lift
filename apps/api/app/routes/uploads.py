@@ -41,7 +41,7 @@ def presign_upload(req: PresignRequest):
     key = f"raw/{uuid.uuid4()}-{clean_filename}"
     
     try:
-        url = generate_presigned_url(key, req.content_type, settings.presign_ttl)
+        url = generate_presigned_url(key, req.content_type, req.file_size, settings.presign_ttl)
         return {"key": key, "url": url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate presigned URL: {str(e)}")
