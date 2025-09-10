@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, validator
-from ..aws import generate_presigned_url
+from ..aws import s3_client
 from ..settings import settings
 
 router = APIRouter()
@@ -34,14 +34,41 @@ class PresignResponse(BaseModel):
     key: str
     url: str
 
+class PresignPostResponse(BaseModel):
+    key: str
+    url: str
+    fields: dict
+
 @router.post("/v1/uploads/presign", response_model=PresignResponse)
-def presign_upload(req: PresignRequest):
+async def presign_upload(req: PresignRequest):
     # Sanitize filename and create deterministic key
     clean_filename = "".join(c for c in req.filename if c.isalnum() or c in '.-_')
     key = f"raw/{uuid.uuid4()}-{clean_filename}"
     
     try:
-        url = generate_presigned_url(key, req.content_type, req.file_size, settings.presign_ttl)
+        url = await s3_client.generate_presigned_url(key, req.content_type, req.file_size, settings.presign_ttl)
         return {"key": key, "url": url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate presigned URL: {str(e)}")
+
+@router.post("/v1/uploads/presign-post", response_model=PresignPostResponse)
+async def presign_upload_post(req: PresignRequest):
+    """Generate presigned POST data for multipart uploads (better for large files)"""
+    # Sanitize filename and create deterministic key
+    clean_filename = "".join(c for c in req.filename if c.isalnum() or c in '.-_')
+    key = f"raw/{uuid.uuid4()}-{clean_filename}"
+    
+    try:
+        result = await s3_client.generate_presigned_post(
+            key, 
+            req.content_type, 
+            req.file_size, 
+            settings.presign_ttl
+        )
+        return {
+            "key": key, 
+            "url": result["url"],
+            "fields": result["fields"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate presigned POST: {str(e)}")

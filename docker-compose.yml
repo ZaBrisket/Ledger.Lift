@@ -63,6 +63,21 @@ services:
       MAX_FILE_SIZE: "104857600"
       PRESIGN_TTL: "900"
       CORS_ORIGINS: http://localhost:3000
+      # Database optimization
+      DB_POOL_SIZE: "20"
+      DB_MAX_OVERFLOW: "30"
+      DB_POOL_TIMEOUT: "30"
+      DB_POOL_RECYCLE: "3600"
+      # S3 Circuit breaker settings
+      S3_FAILURE_THRESHOLD: "5"
+      S3_RECOVERY_TIMEOUT: "60"
+      S3_CLIENT_REFRESH_INTERVAL: "300"
+      S3_MAX_RETRIES: "3"
+      S3_CONNECTION_TIMEOUT: "10"
+      S3_READ_TIMEOUT: "30"
+      # API timeouts (seconds)
+      DEFAULT_REQUEST_TIMEOUT: "30"
+      UPLOAD_TIMEOUT: "120"
     ports:
       - "8000:8000"
     depends_on:
