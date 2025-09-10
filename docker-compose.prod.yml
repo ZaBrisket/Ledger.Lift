@@ -1,0 +1,119 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-ledgerlift}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-ledgerlift}
+    volumes:
+      - pg_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ledgerlift}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ledgerlift-network
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.prod
+    environment:
+      # Database optimization
+      DATABASE_URL: postgresql+psycopg://${DB_USER:-ledgerlift}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-ledgerlift}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-30}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+      
+      # S3 configuration
+      USE_AWS: ${USE_AWS:-true}
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      
+      # Circuit breaker settings
+      S3_FAILURE_THRESHOLD: ${S3_FAILURE_THRESHOLD:-5}
+      S3_RECOVERY_TIMEOUT: ${S3_RECOVERY_TIMEOUT:-60}
+      
+      # API settings
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-104857600}
+      PRESIGN_TTL: ${PRESIGN_TTL:-900}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      
+      # Timeout settings
+      DEFAULT_REQUEST_TIMEOUT: ${DEFAULT_REQUEST_TIMEOUT:-30}
+      UPLOAD_TIMEOUT: ${UPLOAD_TIMEOUT:-120}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      
+      # Performance monitoring
+      ENABLE_REQUEST_LOGGING: ${ENABLE_REQUEST_LOGGING:-true}
+      ENABLE_PERFORMANCE_MONITORING: ${ENABLE_PERFORMANCE_MONITORING:-true}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "
+      alembic upgrade head &&
+      python -c 'import app.db as d; d.create_tables()' &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+      "
+    restart: unless-stopped
+    networks:
+      - ledgerlift-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    build:
+      context: ./apps/worker
+      dockerfile: Dockerfile.prod
+    environment:
+      DATABASE_URL: postgresql+psycopg://${DB_USER:-ledgerlift}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-ledgerlift}
+      USE_AWS: ${USE_AWS:-true}
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ledgerlift-network
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - ledgerlift-network
+
+volumes:
+  pg_prod:
+
+networks:
+  ledgerlift-network:
+    driver: bridge
