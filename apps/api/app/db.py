@@ -2,7 +2,7 @@ import logging
 import time
 from contextlib import contextmanager
 from typing import Generator, Optional, Dict, Any
-from sqlalchemy import create_engine, event, pool
+from sqlalchemy import create_engine, event, pool, text
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, Session
 from sqlalchemy.exc import SQLAlchemyError, DisconnectionError
 from sqlalchemy.engine import Engine
@@ -126,7 +126,7 @@ class DatabaseManager:
             
             # Test basic connectivity
             with self.get_session() as session:
-                result = session.execute("SELECT 1").scalar()
+                result = session.execute(text("SELECT 1")).scalar()
                 if result != 1:
                     raise Exception("Basic query failed")
             

@@ -204,6 +204,19 @@ s3_status = get_s3_health()
 s3_stats = get_s3_stats()
 ```
 
+## 🐛 Bug Fixes Applied
+
+### SQLAlchemy 2.0 Compatibility Issue
+**Fixed**: Corrected invalid query in `get_document_stats()` method that mixed `session.query()` with deprecated `engine.execute()`.
+
+**Changes Made**:
+- Added `func` import from SQLAlchemy
+- Replaced raw SQL with `func.sum()` and `func.avg()` aggregate functions
+- Updated health check query to use `text()` wrapper for better SQLAlchemy 2.0 compatibility
+- Enhanced error handling for null aggregate results
+
+**Impact**: Prevents runtime errors when accessing document statistics endpoint.
+
 ## ⚡ Migration Impact
 
 **Risk Level**: **Minimal** - All changes are backward compatible

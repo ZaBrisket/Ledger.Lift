@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, Union, Generic, TypeVar
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy import func
 from .models import Document, ProcessingEvent, ProcessingStatus, EventType
 from .aws import s3_manager
 from .db import db_manager
@@ -471,13 +472,14 @@ class DocumentService:
                     ).count()
                     status_counts[status.value] = count
                 
-                # Get file size statistics
+                # Get file size statistics using proper SQLAlchemy 2.0 syntax
                 size_result = session.query(
-                    db_manager.engine.execute("SELECT SUM(file_size), AVG(file_size) FROM documents")
+                    func.sum(Document.file_size),
+                    func.avg(Document.file_size)
                 ).first()
                 
-                total_size = size_result[0] if size_result[0] else 0
-                avg_size = size_result[1] if size_result[1] else 0
+                total_size = size_result[0] if size_result and size_result[0] else 0
+                avg_size = size_result[1] if size_result and size_result[1] else 0
                 
                 stats = {
                     "total_documents": total_docs,
