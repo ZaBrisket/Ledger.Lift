@@ -53,21 +53,51 @@ services:
     build:
       context: ./apps/api
     environment:
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/ledgerlift
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ledgerlift
+      USE_AWS: "false"
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ledger-lift
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_REGION: us-east-1
+      MAX_FILE_SIZE: "104857600"
+      PRESIGN_TTL: "900"
       CORS_ORIGINS: http://localhost:3000
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - minio
-      - minio-setup
+      postgres:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
     command: >
-      sh -c "python -c 'import app.db as d; d.create_tables()' && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      sh -c "
+      alembic upgrade head &&
+      python -c 'import app.db as d; d.create_tables()' &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000
+      "
+
+  worker:
+    build:
+      context: ./apps/worker
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ledgerlift
+      USE_AWS: "false"
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: ledger-lift
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+      WORKER_CONCURRENCY: "4"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-setup:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    # Worker runs as a daemon, can be triggered via CLI
+    command: tail -f /dev/null
 
 volumes:
   pg:
