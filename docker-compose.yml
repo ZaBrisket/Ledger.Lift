@@ -53,16 +53,39 @@ services:
     build:
       context: ./apps/api
     environment:
+      # Database optimization
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/ledgerlift
+      DB_POOL_SIZE: "20"
+      DB_MAX_OVERFLOW: "30"
+      DB_POOL_TIMEOUT: "30"
+      
+      # S3 configuration
       USE_AWS: "false"
       S3_ENDPOINT: http://minio:9000
       S3_BUCKET: ledger-lift
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
       AWS_REGION: us-east-1
+      
+      # Circuit breaker settings
+      S3_FAILURE_THRESHOLD: "5"
+      S3_RECOVERY_TIMEOUT: "60"
+      
+      # API settings
       MAX_FILE_SIZE: "104857600"
       PRESIGN_TTL: "900"
       CORS_ORIGINS: http://localhost:3000
+      
+      # Timeout settings
+      DEFAULT_REQUEST_TIMEOUT: "30"
+      UPLOAD_TIMEOUT: "120"
+      
+      # Logging
+      LOG_LEVEL: "INFO"
+      
+      # Performance monitoring
+      ENABLE_REQUEST_LOGGING: "true"
+      ENABLE_PERFORMANCE_MONITORING: "true"
     ports:
       - "8000:8000"
     depends_on:
