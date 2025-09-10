@@ -3,9 +3,12 @@
 import React, { useRef, useState } from 'react';
 import { presignUpload, registerDocument } from '../lib/api';
 
-type Props = { onStatusChange?: (s: string) => void };
+type Props = { 
+  onStatusChange?: (s: string) => void;
+  onDocumentRegistered?: (docId: string) => void;
+};
 
-export default function UploadDropzone({ onStatusChange }: Props) {
+export default function UploadDropzone({ onStatusChange, onDocumentRegistered }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -21,7 +24,8 @@ export default function UploadDropzone({ onStatusChange }: Props) {
       if (!put.ok) throw new Error(`PUT failed: ${put.status}`);
 
       onStatusChange?.('Registering…');
-      await registerDocument({ s3_key: presigned.key, original_filename: file.name });
+      const document = await registerDocument({ s3_key: presigned.key, original_filename: file.name });
+      onDocumentRegistered?.(document.id);
       onStatusChange?.('Done');
     } catch (e: any) {
       onStatusChange?.(`Error: ${e.message || e}`);

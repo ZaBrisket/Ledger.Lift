@@ -9,6 +9,11 @@ class Settings(BaseSettings):
     aws_secret_access_key: str = "minioadmin"
     aws_region: str = "us-east-1"
     cors_origins: str = "http://localhost:3000"
+    use_aws: bool = False
+    sqs_queue_name: str = "ledger-lift-dev"
+    preview_dpi: int = 144
+    presign_ttl_seconds: int = 900
+    s3_kms_key_id: str | None = None
 
     class Config:
         env_file = ".env"

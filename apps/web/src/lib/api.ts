@@ -21,3 +21,23 @@ export async function registerDocument(payload: { s3_key: string; original_filen
   if (!res.ok) throw new Error(`Register failed: ${res.status}`);
   return res.json();
 }
+
+export function getExportUrl(docId: string): string {
+  return `${getApiBase()}/v1/documents/${docId}/export.xlsx`;
+}
+
+export async function getDocumentArtifacts(docId: string) {
+  const res = await fetch(`${getApiBase()}/v1/documents/${docId}/artifacts`);
+  if (!res.ok) throw new Error(`Get artifacts failed: ${res.status}`);
+  return res.json();
+}
+
+export async function updateArtifact(artifactId: string, payload: { payload: any; status?: string }) {
+  const res = await fetch(`${getApiBase()}/v1/artifacts/${artifactId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Update artifact failed: ${res.status}`);
+  return res.json();
+}

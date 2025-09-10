@@ -1,6 +1,13 @@
 [project]
 name = "ledger-lift-extractors"
 version = "0.1.0"
-description = "Extraction helpers (placeholder)"
+description = "Extraction helpers with multi-engine consensus"
 requires-python = ">=3.11"
 dependencies = []
+
+[project.optional-dependencies]
+consensus = [
+    "pdfplumber==0.10.3",
+    "camelot-py[base]==0.10.1",
+    "tabula-py==2.8.2",  # Requires Java runtime
+]

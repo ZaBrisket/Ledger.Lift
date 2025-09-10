@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, DateTime, func, Integer, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import JSONB
 from .db import Base
 
 class Document(Base):
@@ -11,6 +12,7 @@ class Document(Base):
     created_at: Mapped = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     pages: Mapped[list["Page"]] = relationship("Page", back_populates="document", cascade="all, delete-orphan")
+    artifacts: Mapped[list["Artifact"]] = relationship("Artifact", back_populates="document", cascade="all, delete-orphan")
 
 class Page(Base):
     __tablename__ = "pages"
@@ -20,3 +22,17 @@ class Page(Base):
     page_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
     document: Mapped["Document"] = relationship("Document", back_populates="pages")
+
+class Artifact(Base):
+    __tablename__ = "artifacts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    document_id: Mapped[str] = mapped_column(String, ForeignKey("documents.id"), nullable=False)
+    kind: Mapped[str] = mapped_column(String, nullable=False)  # "table", "ocr", etc.
+    page: Mapped[int] = mapped_column(Integer, nullable=False)
+    engine: Mapped[str] = mapped_column(String, nullable=False)  # "native", "consensus", etc.
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending")  # "pending", "reviewed", etc.
+    created_at: Mapped = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    document: Mapped["Document"] = relationship("Document", back_populates="artifacts")
