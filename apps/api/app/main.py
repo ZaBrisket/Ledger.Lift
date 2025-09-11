@@ -15,5 +15,5 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
-app.include_router(uploads.router)
+app.include_router(uploads.router)  # Now includes /v1/uploads prefix
 app.include_router(documents.router)
