@@ -77,7 +77,9 @@ class ApiClient {
   private uploadTimeout = 120000; // 2 minutes
 
   constructor() {
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    // Use globalThis to safely access environment variables in browser
+    const env = (globalThis as any).process?.env || {};
+    this.baseUrl = env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   }
 
   /**
@@ -111,7 +113,12 @@ class ApiClient {
       },
     };
 
-    let lastError: ApiError;
+    let lastError: ApiError = createApiError(
+      'Request failed after all retry attempts',
+      'REQUEST_FAILED',
+      undefined,
+      { requestId, retries }
+    );
 
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
