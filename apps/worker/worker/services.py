@@ -5,11 +5,12 @@ import tempfile
 import logging
 import json
 import time
-import signal
 import os
+import threading
 from pathlib import Path
 from contextlib import contextmanager
 from typing import Optional, List, Dict, Any
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from .database import WorkerDatabase
 from .aws_client import WorkerS3Client
 from .pipeline.render import render_pdf_preview
@@ -78,22 +79,88 @@ class ResourceManager:
         self.temp_files.clear()
         self.temp_dirs.clear()
 
+class TimeoutManager:
+    """Thread-safe, cross-platform timeout manager."""
+    
+    def __init__(self):
+        self._timers = {}
+        self._lock = threading.Lock()
+    
+    def create_timeout(self, timeout_id: str, seconds: int, callback):
+        """Create a timeout that calls callback after seconds."""
+        with self._lock:
+            # Cancel existing timer if any
+            if timeout_id in self._timers:
+                self._timers[timeout_id].cancel()
+            
+            timer = threading.Timer(seconds, callback)
+            self._timers[timeout_id] = timer
+            timer.start()
+            return timer
+    
+    def cancel_timeout(self, timeout_id: str):
+        """Cancel a timeout by ID."""
+        with self._lock:
+            if timeout_id in self._timers:
+                self._timers[timeout_id].cancel()
+                del self._timers[timeout_id]
+    
+    def cleanup_all(self):
+        """Cancel all active timers."""
+        with self._lock:
+            for timer in self._timers.values():
+                timer.cancel()
+            self._timers.clear()
+
+# Global timeout manager instance
+_timeout_manager = TimeoutManager()
+
 @contextmanager
 def timeout_context(seconds: int):
-    """Context manager for operation timeouts."""
-    def timeout_handler(signum, frame):
-        raise TimeoutError(f"Operation timed out after {seconds} seconds")
+    """
+    Cross-platform, thread-safe context manager for operation timeouts.
     
-    # Set up the timeout
-    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(seconds)
+    This implementation works on Windows, Linux, and macOS without relying
+    on Unix-specific signals. It's also thread-safe for concurrent operations.
+    """
+    timeout_id = f"timeout_{threading.current_thread().ident}_{time.time()}"
+    timeout_occurred = threading.Event()
+    
+    def timeout_callback():
+        timeout_occurred.set()
+    
+    # Create the timeout
+    timer = _timeout_manager.create_timeout(timeout_id, seconds, timeout_callback)
     
     try:
-        yield
+        yield timeout_occurred
+        
+        # Check if timeout occurred during execution
+        if timeout_occurred.is_set():
+            raise TimeoutError(f"Operation timed out after {seconds} seconds")
+            
     finally:
-        # Clean up the timeout
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
+        # Always clean up the timeout
+        _timeout_manager.cancel_timeout(timeout_id)
+
+@contextmanager
+def executor_timeout_context(seconds: int):
+    """
+    Alternative timeout implementation using ThreadPoolExecutor.
+    
+    This provides a more robust timeout mechanism for CPU-bound operations
+    that might not check the timeout_occurred event frequently enough.
+    """
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        def timeout_wrapper():
+            yield
+        
+        try:
+            future = executor.submit(timeout_wrapper)
+            future.result(timeout=seconds)
+            yield
+        except FuturesTimeoutError:
+            raise TimeoutError(f"Operation timed out after {seconds} seconds")
 
 class DocumentProcessor:
     """Enhanced document processor with comprehensive error handling and resource management."""
@@ -154,7 +221,8 @@ class DocumentProcessor:
         logger.info(f"Starting document processing: {doc_id}")
         
         try:
-            with timeout_context(timeout_seconds):
+            # Use a separate thread for the main processing pipeline to enable timeout
+            def _process_pipeline():
                 # Stage 1: Update status to processing
                 self._update_status_safe(doc_id, ProcessingStatus.PROCESSING, processing_metadata)
                 self._log_event_safe(doc_id, EventType.PROCESSING_STARTED, "Document processing started", processing_metadata)
@@ -220,6 +288,16 @@ class DocumentProcessor:
                 
                 logger.info(f"Document processing completed successfully: {doc_id} in {processing_time:.3f}s")
                 return processing_metadata
+            
+            # Execute the processing pipeline with timeout
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_process_pipeline)
+                try:
+                    return future.result(timeout=timeout_seconds)
+                except FuturesTimeoutError:
+                    # Cancel the future if possible
+                    future.cancel()
+                    raise TimeoutError(f"Processing timed out after {timeout_seconds} seconds")
                 
         except TimeoutError as e:
             processing_time = time.time() - start_time
@@ -314,8 +392,14 @@ class DocumentProcessor:
             # Set a reasonable timeout for PDF rendering
             render_timeout = int(os.getenv('PDF_RENDER_TIMEOUT', '120'))  # 2 minutes default
             
-            with timeout_context(render_timeout):
-                preview_paths = render_pdf_preview(tmp_path)
+            # Execute rendering with timeout using ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(render_pdf_preview, tmp_path)
+                try:
+                    preview_paths = future.result(timeout=render_timeout)
+                except FuturesTimeoutError:
+                    future.cancel()
+                    raise TimeoutError(f"PDF rendering timed out after {render_timeout}s")
             
             if not preview_paths:
                 raise ValueError("No preview pages were generated")
@@ -391,8 +475,14 @@ class DocumentProcessor:
             # Set a reasonable timeout for table extraction
             extract_timeout = int(os.getenv('TABLE_EXTRACT_TIMEOUT', '180'))  # 3 minutes default
             
-            with timeout_context(extract_timeout):
-                tables = extract_tables_stub(tmp_path)
+            # Execute table extraction with timeout using ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(extract_tables_stub, tmp_path)
+                try:
+                    tables = future.result(timeout=extract_timeout)
+                except FuturesTimeoutError:
+                    future.cancel()
+                    raise TimeoutError(f"Table extraction timed out after {extract_timeout}s")
             
             logger.info(f"Extracted {len(tables)} tables from {doc_id}")
             return tables

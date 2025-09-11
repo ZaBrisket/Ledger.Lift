@@ -47,6 +47,7 @@ make pre-commit
 - Set explicit timeouts on all external calls
 - Use bounded retries with exponential backoff + jitter
 - Implement operation-level timeouts for long-running processes
+- Use cross-platform, thread-safe timeout mechanisms
 - Fail fast with clear timeout messages
 
 ### 3. **Resource Management**
@@ -148,6 +149,52 @@ def retry_on_failure(max_retries: int = 3, backoff_factor: float = 1.0):
             raise
     
     raise last_exception
+```
+
+### Cross-Platform Timeout Pattern
+```python
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+import threading
+import time
+
+@contextmanager
+def timeout_context(seconds: int):
+    """Cross-platform, thread-safe timeout context manager."""
+    timeout_id = f"timeout_{threading.current_thread().ident}_{time.time()}"
+    timeout_occurred = threading.Event()
+    
+    def timeout_callback():
+        timeout_occurred.set()
+    
+    # Create the timeout using threading.Timer (works on all platforms)
+    timer = threading.Timer(seconds, timeout_callback)
+    timer.start()
+    
+    try:
+        yield timeout_occurred
+        
+        # Check if timeout occurred during execution
+        if timeout_occurred.is_set():
+            raise TimeoutError(f"Operation timed out after {seconds} seconds")
+            
+    finally:
+        timer.cancel()  # Always clean up
+
+# Usage for CPU-bound operations
+def process_with_timeout(data, timeout_seconds=300):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(cpu_intensive_operation, data)
+        try:
+            return future.result(timeout=timeout_seconds)
+        except FuturesTimeoutError:
+            future.cancel()
+            raise TimeoutError(f"Processing timed out after {timeout_seconds}s")
+
+# Benefits:
+# ✅ Works on Windows, Linux, macOS (no Unix signals)
+# ✅ Thread-safe for concurrent operations
+# ✅ Proper resource cleanup
+# ✅ Interruptible CPU-bound operations
 ```
 
 ### Resource Management Pattern

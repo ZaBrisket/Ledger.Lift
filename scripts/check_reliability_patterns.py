@@ -230,6 +230,14 @@ def check_regex_patterns(content: str, filename: str) -> List[Tuple[int, str]]:
         # Check for magic numbers in critical operations
         if re.search(r'retry.*=\s*\d+', line) and not re.search(r'retry.*=\s*[A-Z_]+', line):
             issues.append((i, "Magic number in retry configuration - use named constant"))
+        
+        # Check for Unix-specific signal usage (not cross-platform)
+        if re.search(r'signal\.SIGALRM|signal\.alarm\(', line):
+            issues.append((i, "Unix-specific signal usage - use cross-platform timeout mechanism"))
+        
+        # Check for potential Windows compatibility issues
+        if re.search(r'import signal', line) and re.search(r'def.*timeout', line, re.IGNORECASE):
+            issues.append((i, "Signal-based timeout may not work on Windows - use threading.Timer instead"))
     
     return issues
 
