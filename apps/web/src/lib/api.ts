@@ -154,7 +154,7 @@ class ApiClient {
         
         if (error instanceof ApiError) {
           lastError = error;
-        } else if (error.name === 'AbortError') {
+        } else if (error instanceof Error && error.name === 'AbortError') {
           lastError = createApiError(
             'Request timeout',
             'TIMEOUT',
@@ -162,8 +162,9 @@ class ApiClient {
             { requestId, attempt: attempt + 1, timeout }
           );
         } else {
+          const errorMessage = error instanceof Error ? error.message : 'Network error';
           lastError = createApiError(
-            error.message || 'Network error',
+            errorMessage,
             'NETWORK_ERROR',
             undefined,
             { requestId, attempt: attempt + 1 }
