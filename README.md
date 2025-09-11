@@ -1,6 +1,22 @@
 # Ledger Lift — Monorepo (v0.1.0)
 
-A production‑grade scaffold for **PDF→Excel data book** extraction workflows.
+A production‑grade scaffold for **PDF→Excel data book** extraction workflows with comprehensive reliability and testing infrastructure.
+
+## 🛡️ Reliability & Testing
+
+This codebase follows strict reliability standards with comprehensive testing, error handling, and observability patterns. See the **[Reliability Playbook](RELIABILITY_PLAYBOOK.md)** for detailed guidelines.
+
+**Quick Commands:**
+```bash
+# Install dependencies and setup
+make install
+
+# Run reliability checks
+make reliability-check
+
+# Run full CI pipeline locally
+make ci-local
+```
 
 ## Quickstart (Local Dev)
 
