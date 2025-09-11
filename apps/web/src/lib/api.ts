@@ -111,7 +111,7 @@ class ApiClient {
       },
     };
 
-    let lastError: ApiError;
+    let lastError: ApiError = createApiError('Unknown error', 'UNKNOWN_ERROR');
 
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
@@ -154,7 +154,7 @@ class ApiClient {
         
         if (error instanceof ApiError) {
           lastError = error;
-        } else if (error.name === 'AbortError') {
+        } else if (error instanceof Error && error.name === 'AbortError') {
           lastError = createApiError(
             'Request timeout',
             'TIMEOUT',
@@ -163,7 +163,7 @@ class ApiClient {
           );
         } else {
           lastError = createApiError(
-            error.message || 'Network error',
+            error instanceof Error ? error.message : 'Network error',
             'NETWORK_ERROR',
             undefined,
             { requestId, attempt: attempt + 1 }
