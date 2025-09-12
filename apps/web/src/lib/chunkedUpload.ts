@@ -7,7 +7,7 @@ export interface ChunkedUploadOptions {
   chunkSize?: number;
   simultaneousUploads?: number;
   testChunks?: boolean;
-  throttleProgressCallbacks?: number;
+  throttleProgressCallbacksInterval?: number;
   maxChunkRetries?: number;
   chunkRetryInterval?: number;
 }
@@ -44,7 +44,7 @@ export class ChunkedUploader {
       chunkSize: 5 * 1024 * 1024, // 5MB chunks
       simultaneousUploads: 3,
       testChunks: true,
-      throttleProgressCallbacks: 500,
+      throttleProgressCallbacksInterval: 500,
       maxChunkRetries: 3,
       chunkRetryInterval: 1000,
       ...options
@@ -55,7 +55,7 @@ export class ChunkedUploader {
       chunkSize: this.options.chunkSize,
       simultaneousUploads: this.options.simultaneousUploads,
       testChunks: this.options.testChunks,
-      throttleProgressCallbacks: this.options.throttleProgressCallbacks,
+      throttleProgressCallbacksInterval: this.options.throttleProgressCallbacksInterval,
       maxChunkRetries: this.options.maxChunkRetries,
       chunkRetryInterval: this.options.chunkRetryInterval,
       headers: {
