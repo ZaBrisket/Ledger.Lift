@@ -7,7 +7,7 @@ export interface ChunkedUploadOptions {
   chunkSize?: number;
   simultaneousUploads?: number;
   testChunks?: boolean;
-  throttleProgressCallbacksInterval?: number;
+  throttleProgressCallbacks?: number;
   maxChunkRetries?: number;
   chunkRetryInterval?: number;
 }
@@ -44,7 +44,7 @@ export class ChunkedUploader {
       chunkSize: 5 * 1024 * 1024, // 5MB chunks
       simultaneousUploads: 3,
       testChunks: true,
-      throttleProgressCallbacksInterval: 500,
+      throttleProgressCallbacks: 500,
       maxChunkRetries: 3,
       chunkRetryInterval: 1000,
       ...options
@@ -55,7 +55,7 @@ export class ChunkedUploader {
       chunkSize: this.options.chunkSize,
       simultaneousUploads: this.options.simultaneousUploads,
       testChunks: this.options.testChunks,
-      throttleProgressCallbacksInterval: this.options.throttleProgressCallbacksInterval,
+      throttleProgressCallbacks: this.options.throttleProgressCallbacks,
       maxChunkRetries: this.options.maxChunkRetries,
       chunkRetryInterval: this.options.chunkRetryInterval,
       headers: {
@@ -72,8 +72,8 @@ export class ChunkedUploader {
     });
 
     this.resumable.on('fileProgress', (file: Resumable.ResumableFile) => {
-      const progress = file.progress() * 100;
-      const bytesUploaded = file.size * file.progress();
+      const progress = file.progress(false) * 100;
+      const bytesUploaded = file.size * file.progress(false);
       const totalBytes = file.size;
       const chunksUploaded = file.chunks.length;
       const totalChunks = Math.ceil(file.size / this.options.chunkSize);
