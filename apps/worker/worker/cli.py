@@ -8,9 +8,14 @@ from .database import WorkerDatabase
 from .pipeline.render import render_pdf_preview
 from .pipeline.extract import extract_tables_stub
 from .services import DocumentProcessor
+from .celery_cli import app as celery_app
+from .tasks import process_document_task, batch_process_documents_task
 
 app = typer.Typer(help="Ledger Lift worker CLI")
 console = Console()
+
+# Add Celery commands
+app.add_typer(celery_app, name="celery", help="Celery worker commands")
 
 @app.command("process-document")
 def process_document(doc_id: str):
@@ -46,6 +51,27 @@ def list_documents():
     db = WorkerDatabase()
     # This would need a method in WorkerDatabase to list documents
     console.log("Document listing not yet implemented")
+
+@app.command("queue-document")
+def queue_document(doc_id: str):
+    """Queue a document for processing"""
+    try:
+        result = process_document_task.delay(doc_id)
+        console.log(f"[green]Queued document {doc_id} for processing (task_id: {result.id})[/]")
+    except Exception as e:
+        console.log(f"[red]Failed to queue document {doc_id}: {e}[/]")
+        raise typer.Exit(1)
+
+@app.command("queue-batch")
+def queue_batch(doc_ids: str):
+    """Queue multiple documents for batch processing"""
+    try:
+        doc_id_list = [doc_id.strip() for doc_id in doc_ids.split(',')]
+        result = batch_process_documents_task.delay(doc_id_list)
+        console.log(f"[green]Queued {len(doc_id_list)} documents for batch processing (task_id: {result.id})[/]")
+    except Exception as e:
+        console.log(f"[red]Failed to queue batch processing: {e}[/]")
+        raise typer.Exit(1)
 
 if __name__ == "__main__":
     app()

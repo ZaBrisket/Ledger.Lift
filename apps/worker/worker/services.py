@@ -11,10 +11,11 @@ from pathlib import Path
 from contextlib import contextmanager
 from typing import Optional, List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+import pandas as pd
 from .database import WorkerDatabase
 from .aws_client import WorkerS3Client
 from .pipeline.render import render_pdf_preview
-from .pipeline.extract import extract_tables_stub
+from .pipeline.extract import extract_tables_production, apply_ledger_transformations
 from .models import ProcessingStatus, EventType
 
 logger = logging.getLogger(__name__)
@@ -477,12 +478,15 @@ class DocumentProcessor:
             
             # Execute table extraction with timeout using ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(extract_tables_stub, tmp_path)
+                future = executor.submit(extract_tables_production, tmp_path)
                 try:
                     tables = future.result(timeout=extract_timeout)
                 except FuturesTimeoutError:
                     future.cancel()
                     raise TimeoutError(f"Table extraction timed out after {extract_timeout}s")
+            
+            # Store extracted tables as artifacts
+            self._store_table_artifacts(doc_id, tables, metadata)
             
             logger.info(f"Extracted {len(tables)} tables from {doc_id}")
             return tables
@@ -514,6 +518,33 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Failed to log event for {doc_id}: {e}")
             # Don't raise here, event logging is not critical for processing
+    
+    def _store_table_artifacts(self, doc_id: str, tables: List[Dict], metadata: Dict[str, Any]):
+        """Store extracted tables as artifacts in the database."""
+        try:
+            for table in tables:
+                # Apply ledger transformations to the data
+                if table.get('data'):
+                    df = pd.DataFrame(table['data'])
+                    transformed_df = apply_ledger_transformations(df)
+                    table['data'] = transformed_df.to_dict('records')
+                
+                # Store as artifact
+                self.db.create_artifact(
+                    document_id=doc_id,
+                    artifact_type='table',
+                    extraction_engine=table.get('engine', 'unknown'),
+                    confidence_score=table.get('accuracy', 0.0),
+                    data=json.dumps(table),
+                    page_id=None  # Will be linked to page if available
+                )
+                
+            logger.debug(f"Stored {len(tables)} table artifacts for {doc_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to store table artifacts for {doc_id}: {e}")
+            metadata['errors'].append(f"Artifact storage failed: {e}")
+            # Don't raise here, artifact storage is not critical for processing
     
     def _handle_processing_failure(self, doc_id: str, error_message: str, metadata: Dict[str, Any]):
         """Handle processing failure with proper logging and status updates."""
