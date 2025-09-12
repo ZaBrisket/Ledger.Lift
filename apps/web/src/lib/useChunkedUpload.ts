@@ -4,6 +4,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ChunkedUploader, UploadProgress, UploadResult, ChunkedUploadOptions } from './chunkedUpload';
 
+// Re-export types for external use
+export type { UploadProgress, UploadResult, ChunkedUploadOptions };
+
 export interface UseChunkedUploadOptions extends ChunkedUploadOptions {
   apiBase?: string;
   onProgress?: (progress: UploadProgress) => void;
