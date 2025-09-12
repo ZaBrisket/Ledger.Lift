@@ -1,10 +1,13 @@
 import logging
 import time
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Header, Query
+from fastapi import APIRouter, HTTPException, Header, Query, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, validator
 from ..services import DocumentService
 from ..models import ProcessingStatus
+from io import BytesIO
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +62,13 @@ class DocumentCreate(BaseModel):
     def validate_sha256_hash(cls, v):
         if v is not None:
             v = v.strip()
-            if v and (len(v) != 64 or not all(c in '0123456789abcdefABCDEF' for c in v)):
-                raise ValueError('Invalid SHA256 hash format')
-            return v.lower() if v else None
+            if v:
+                # Normalize to lowercase for canonical form
+                v = v.lower()
+                if len(v) != 64 or not all(c in '0123456789abcdef' for c in v):
+                    raise ValueError('Invalid SHA256 hash format - must be 64 lowercase hex characters')
+                return v
+            return None
         return v
 
 class DocumentOut(BaseModel):
@@ -346,6 +353,98 @@ def get_document(doc_id: str):
     except Exception as e:
         processing_time = time.time() - start_time
         logger.error(f"Unexpected error retrieving document {doc_id}: {e}", extra={
+            "document_id": doc_id,
+            "error_type": type(e).__name__,
+            "processing_time_ms": round(processing_time * 1000, 2)
+        })
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "INTERNAL_ERROR",
+                "message": "Internal server error"
+            }
+        )
+
+@router.get("/v1/documents/{doc_id}/export/excel")
+def export_document_excel(doc_id: str):
+    """Export document as Excel file with extracted table data."""
+    start_time = time.time()
+    
+    # Input validation
+    if not doc_id or not doc_id.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "INVALID_INPUT",
+                "message": "Document ID cannot be empty"
+            }
+        )
+    
+    doc_id = doc_id.strip()
+    if len(doc_id) > 100:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "INVALID_INPUT",
+                "message": "Document ID too long"
+            }
+        )
+    
+    logger.info(f"Excel export requested for document: {doc_id}")
+    
+    try:
+        result = DocumentService.generate_excel_output(doc_id)
+        
+        if not result.success:
+            processing_time = time.time() - start_time
+            logger.warning(f"Excel export failed: {result.error}", extra={
+                "document_id": doc_id,
+                "error_code": result.error_code,
+                "processing_time_ms": round(processing_time * 1000, 2)
+            })
+            
+            status_code = 500
+            if result.error_code == "NOT_FOUND":
+                status_code = 404
+            elif result.error_code == "NO_ARTIFACTS":
+                status_code = 404
+            elif result.error_code == "ARTIFACTS_ERROR":
+                status_code = 503
+            elif result.error_code == "EXCEL_ERROR":
+                status_code = 500
+                
+            raise HTTPException(
+                status_code=status_code,
+                detail={
+                    "error": result.error_code or "UNKNOWN_ERROR",
+                    "message": result.error,
+                    "details": result.metadata
+                }
+            )
+        
+        excel_bytes = result.data
+        processing_time = time.time() - start_time
+        
+        logger.info(f"Excel export completed: {doc_id} ({len(excel_bytes)} bytes) in {processing_time:.3f}s")
+        
+        # Create streaming response
+        def generate():
+            yield excel_bytes
+        
+        return StreamingResponse(
+            generate(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename=document_{doc_id}_extracted_tables.xlsx",
+                "Content-Length": str(len(excel_bytes))
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        processing_time = time.time() - start_time
+        logger.error(f"Unexpected error exporting Excel for {doc_id}: {e}", extra={
             "document_id": doc_id,
             "error_type": type(e).__name__,
             "processing_time_ms": round(processing_time * 1000, 2)

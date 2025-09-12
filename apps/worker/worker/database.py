@@ -22,6 +22,7 @@ class Document(Base):
 
     pages: Mapped[list["Page"]] = relationship("Page", back_populates="document", cascade="all, delete-orphan")
     events: Mapped[list["ProcessingEvent"]] = relationship("ProcessingEvent", back_populates="document", cascade="all, delete-orphan")
+    artifacts: Mapped[list["Artifact"]] = relationship("Artifact", back_populates="document", cascade="all, delete-orphan")
 
 class Page(Base):
     __tablename__ = "pages"
@@ -47,6 +48,25 @@ class ProcessingEvent(Base):
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped["Document"] = relationship("Document", back_populates="events")
+
+class Artifact(Base):
+    __tablename__ = "artifacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[str] = mapped_column(String, ForeignKey("documents.id"), nullable=False)
+    page_id: Mapped[int] = mapped_column(Integer, ForeignKey("pages.id"), nullable=True)
+    artifact_type: Mapped[str] = mapped_column(String, nullable=False)  # "table", "figure", "text"
+    s3_key: Mapped[str] = mapped_column(String, nullable=True)
+    extraction_engine: Mapped[str] = mapped_column(String, nullable=True)
+    confidence_score: Mapped[float] = mapped_column(Float, nullable=True)
+    bbox_x: Mapped[int] = mapped_column(Integer, nullable=True)
+    bbox_y: Mapped[int] = mapped_column(Integer, nullable=True)
+    bbox_width: Mapped[int] = mapped_column(Integer, nullable=True)
+    bbox_height: Mapped[int] = mapped_column(Integer, nullable=True)
+    data: Mapped[str] = mapped_column(Text, nullable=True)  # JSON string
+    created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    document: Mapped["Document"] = relationship("Document", back_populates="artifacts")
 
 class WorkerDatabase:
     def __init__(self):
@@ -91,3 +111,25 @@ class WorkerDatabase:
             )
             session.add(event)
             session.commit()
+    
+    def create_artifact(self, document_id: str, artifact_type: str, extraction_engine: str = None,
+                       confidence_score: float = None, data: str = None, page_id: int = None,
+                       s3_key: str = None, bbox_x: int = None, bbox_y: int = None,
+                       bbox_width: int = None, bbox_height: int = None):
+        with self.SessionLocal() as session:
+            artifact = Artifact(
+                document_id=document_id,
+                page_id=page_id,
+                artifact_type=artifact_type,
+                s3_key=s3_key,
+                extraction_engine=extraction_engine,
+                confidence_score=confidence_score,
+                bbox_x=bbox_x,
+                bbox_y=bbox_y,
+                bbox_width=bbox_width,
+                bbox_height=bbox_height,
+                data=data
+            )
+            session.add(artifact)
+            session.commit()
+            return artifact
