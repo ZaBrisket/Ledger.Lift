@@ -116,7 +116,7 @@ describe('multipart workflow', () => {
           size: fileSize,
           contentType: 'application/pdf',
           sha256: 'b'.repeat(64),
-          sha256Base64: 'B'.repeat(44),
+          sha256Base64: `${'B'.repeat(43)}=`,
         }),
       } as any,
       {} as any

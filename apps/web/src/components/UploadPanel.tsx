@@ -373,7 +373,7 @@ async function uploadSingleWithProgress(
   });
 }
 
-async function uploadPartWithRetry(
+export async function uploadPartWithRetry(
   url: string,
   chunk: Blob,
   partNumber: number,

@@ -67,7 +67,7 @@ describe('multipart limits', () => {
           size: fiftyTb,
           contentType: 'application/pdf',
           sha256: 'c'.repeat(64),
-          sha256Base64: 'C'.repeat(44),
+          sha256Base64: `${'C'.repeat(43)}=`,
         }),
       } as any,
       {} as any
@@ -95,7 +95,7 @@ describe('multipart limits', () => {
           size: fiftyTbPlus,
           contentType: 'application/pdf',
           sha256: 'd'.repeat(64),
-          sha256Base64: 'D'.repeat(44),
+          sha256Base64: `${'D'.repeat(43)}=`,
         }),
       } as any,
       {} as any

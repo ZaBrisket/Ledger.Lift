@@ -60,7 +60,7 @@ const validBody = {
   size: 1024,
   contentType: 'application/pdf',
   sha256: 'a'.repeat(64),
-  sha256Base64: 'A'.repeat(44),
+  sha256Base64: `${'A'.repeat(43)}=`,
 };
 
 const eventBase = {
@@ -118,5 +118,52 @@ describe('initiate-upload function', () => {
 
     expect(response.statusCode).toBe(415);
     expect(JSON.parse(response.body).error).toMatch(/supported/i);
+  });
+
+  it('rejects invalid base64 checksums', async () => {
+    const { handler } = await loadModule<typeof import('../netlify/functions/initiate-upload')>(
+      '../netlify/functions/initiate-upload'
+    );
+
+    const response = await handler(
+      {
+        ...eventBase,
+        httpMethod: 'POST',
+        body: JSON.stringify({
+          ...validBody,
+          sha256Base64: 'invalid-checksum',
+        }),
+      } as any,
+      {} as any
+    );
+
+    expect(response.statusCode).toBe(400);
+    const body = JSON.parse(response.body);
+    expect(body.details?.sha256Base64?.[0]).toMatch(/44 character/i);
+  });
+
+  it('includes checksum on single uploads', async () => {
+    getSignedUrlMock.mockImplementationOnce(async (_client, command: any) => {
+      expect(command.__type).toBe('PutObjectCommand');
+      expect(command.input.ChecksumSHA256).toBe(validBody.sha256Base64);
+      return 'https://single.example.com';
+    });
+
+    const { handler } = await loadModule<typeof import('../netlify/functions/initiate-upload')>(
+      '../netlify/functions/initiate-upload'
+    );
+
+    const response = await handler(
+      {
+        ...eventBase,
+        httpMethod: 'POST',
+        body: JSON.stringify(validBody),
+      } as any,
+      {} as any
+    );
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.uploadType).toBe('single');
   });
 });

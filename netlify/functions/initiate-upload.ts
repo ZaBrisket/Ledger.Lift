@@ -17,7 +17,7 @@ const uploadRequestSchema = z.object({
     .regex(/^[a-fA-F0-9]{64}$/u, 'sha256 must be a 64 character hex string'),
   sha256Base64: z
     .string()
-    .regex(/^[A-Za-z0-9+/]+={0,2}$/u, 'sha256Base64 must be a valid base64 checksum'),
+    .regex(/^[A-Za-z0-9+/]{43}=$/u, 'sha256Base64 must be a 44 character base64 checksum'),
 });
 
 const sanitizeFilename = (filename: string) =>

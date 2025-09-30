@@ -64,4 +64,27 @@ describe('CORS utilities', () => {
     expect(response.headers?.['X-Request-ID']).toBeDefined();
     expect(response.headers?.['Access-Control-Allow-Origin']).toBe(allowedOrigin);
   });
+
+  it('normalizes allowed origins for case and trailing slashes', async () => {
+    const { createHandler } = await loadModule<typeof import('../netlify/functions/_utils')>(
+      '../netlify/functions/_utils',
+      { ALLOWED_ORIGINS: 'https://frontend.test,https://api.test' }
+    );
+
+    const handler = createHandler(['GET'], async () => ({
+      statusCode: 200,
+      body: JSON.stringify({ ok: true }),
+    }));
+
+    const response = await handler(
+      buildEvent({
+        httpMethod: 'GET',
+        headers: { origin: 'HTTPS://FRONTEND.TEST/' },
+      }),
+      {} as any
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers?.['Access-Control-Allow-Origin']).toBe('https://frontend.test');
+  });
 });
