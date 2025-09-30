@@ -1,0 +1,12 @@
+node_modules/
+.pnpm-store/
+dist/
+.next/
+.vercel/
+.env.local
+.env.development
+.env.production
+.env.test
+coverage/
+.DS_Store
+pnpm-lock.yaml
