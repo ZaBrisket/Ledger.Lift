@@ -1,16 +1,35 @@
 {
-  "name": "ledger-lift",
-  "version": "0.1.0",
+  "name": "ledger-lift-monorepo",
   "private": true,
-  "packageManager": "pnpm@9.6.0",
   "workspaces": [
-    "apps/web",
-    "apps/api",
-    "apps/worker",
+    "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "lint": "echo \"Use package-level linters\"",
-    "build": "echo \"Use package-level builds\""
+    "build": "echo 'root build: apps have their own builds'",
+    "typecheck": "tsc -v || true",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "netlify:dev": "netlify dev --offline --port 9999",
+    "ci": "pnpm -w test && pnpm -w e2e"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.645.0",
+    "@aws-sdk/s3-request-presigner": "^3.645.0",
+    "exceljs": "^4.4.0",
+    "file-type": "^18.7.0",
+    "pdfjs-dist": "^4.10.38",
+    "tesseract.js": "^5.1.0",
+    "undici": "^6.19.8",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.2",
+    "@types/node": "^20.11.30",
+    "concurrently": "^8.2.2",
+    "netlify-cli": "^17.34.5",
+    "pdfkit": "^0.15.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
   }
 }

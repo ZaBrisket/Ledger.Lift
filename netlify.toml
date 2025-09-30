@@ -1,11 +1,36 @@
 [build]
-base = "."
-command = "pnpm -w install && pnpm --filter web build"
-publish = "apps/web/out"
+  base = "."
+  publish = "apps/web/.next"
+  command = "pnpm -w install && pnpm --filter web build"
 
-[[plugins]]
-package = "@netlify/plugin-nextjs"
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  included_files = ["src/**"]
+  external_node_modules = ["pdfjs-dist","tesseract.js","exceljs","file-type","@aws-sdk/client-s3","@aws-sdk/s3-request-presigner"]
 
-[build.environment]
-NODE_VERSION = "18"
-NEXT_TELEMETRY_DISABLED = "1"
+  # Execution limits (background functions are 15 min by platform)
+  # See: https://docs.netlify.com/build/functions/overview/
+  # timeout = 30 # seconds (for sync functions)
+
+# Redirects to clean function endpoints
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Optional friendly path for background parse (rewrites to -background)
+[[redirects]]
+  from = "/api/parse-and-extract"
+  to = "/.netlify/functions/parse-and-extract-background"
+  status = 200
+
+# CORS headers (note: for function responses, set headers within the function itself)
+# Docs: https://docs.netlify.com/manage/routing/headers/
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "https://ledgerlift1.netlify.app"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization, x-amz-*, x-amz-checksum-sha256"
+    Access-Control-Allow-Credentials = "false"

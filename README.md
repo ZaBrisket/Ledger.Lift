@@ -1,88 +1,77 @@
-# Ledger Lift — Monorepo (v0.1.0)
+# Ledger Lift — PDF → Excel Schedules (Beta)
 
-A production‑grade scaffold for **PDF→Excel data book** extraction workflows with comprehensive reliability and testing infrastructure.
+This PR adds an end-to-end pipeline to upload PDFs, parse schedules, and download an Excel workbook. It targets **Netlify** and **Cloudflare R2 (S3-compatible)** storage by default.
 
-## 🛡️ Reliability & Testing
-
-This codebase follows strict reliability standards with comprehensive testing, error handling, and observability patterns. See the **[Reliability Playbook](RELIABILITY_PLAYBOOK.md)** for detailed guidelines.
-
-**Quick Commands:**
-```bash
-# Install dependencies and setup
-make install
-
-# Run reliability checks
-make reliability-check
-
-# Run full CI pipeline locally
-make ci-local
-```
-
-## Quickstart (Local Dev)
+## Quick Start
 
 ```bash
-# 1) Infra: Postgres, MinIO, LocalStack
-docker-compose up -d
+# 1) Copy env
+cp .env.example .env
 
-# 2) Install JS deps
+# 2) Install (pnpm workspace)
 pnpm -w install
 
-# 3) API
-cd apps/api && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# 3) Run unit+integration tests
+pnpm test
 
-# 4) Web
-cd ../../apps/web && pnpm dev
+# 4) Dev: functions + web
+pnpm netlify:dev        # starts Netlify dev (functions on :9999)
+pnpm --filter web dev   # starts Next.js on :3000
+
+# 5) Visit
+open http://localhost:3000/convert
 ```
 
-API: http://localhost:8000  
-Web: http://localhost:3000
+## Configuration
 
-## Environments
+Environment variables (see `.env.example`):
 
-Copy env samples and adjust as needed:
+- `R2_S3_ENDPOINT` – Cloudflare R2 S3 endpoint (leave empty to use AWS S3)
+- `R2_REGION` – region (e.g., `auto` or `us-east-1`)
+- `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET` – bucket name
+- `PDF_MAX_MB` – max upload size (MB), default 100
+- `OCR_ENABLED` – enable OCR fallbacks (default `false`)
+- `ALLOWED_ORIGINS` – CSV of allowed origins for CORS
+- `SCALE` – parsing scale factor (heuristics), default 5
+- `NEXT_PUBLIC_API_URL` – base path for functions (default `/api`)
 
-```
-cp .env.example .env
-cp apps/api/.env.example apps/api/.env
-cp apps/web/.env.example apps/web/.env
-cp apps/worker/.env.example apps/worker/.env
-```
+## Functions
 
-### Netlify
+- `POST /api/initiate-upload` → plan multipart upload (`sourceKey`, `uploadId`, presigned part URLs)
+- `POST /api/ingest-pdf` → finalize (optional MPU) and enqueue job → returns `jobId`
+- `POST /api/parse-and-extract` (background) → parse/ocr/export
+- `GET /api/get-job-status?jobId=...` → job JSON + `downloadUrl` if ready
+- `GET /api/healthz` → 200 with version/time
 
-1. Connect repo to Netlify
-2. Set build:
-   - **Base directory**: `.`
-   - **Build command**: `pnpm -w install && pnpm --filter web build`
-   - **Publish directory**: `apps/web/.next`
-3. Set environment variable:
-   - `NEXT_PUBLIC_API_URL=https://<your-api-domain>` (or local default)
+See `netlify/functions/`.
 
-### GitHub
+## Frontend
 
-```bash
-git init
-git remote add origin https://github.com/ZaBrisket/Ledger.Lift
-git add .
-git commit -m "chore: seed ledger-lift v0.1.0"
-git branch -M main
-git push -u origin main
-```
+- `apps/web/app/convert/page.tsx` – upload ➜ ingest ➜ poll ➜ download
+- `apps/web/src/components/UploadPanel.tsx` – drag‑drop, multipart upload with pause/resume
+- Add nav link via `apps/web/app/nav-instructions.md`
 
-## Services
+## Limits
 
-- **Web**: Next.js 14 (App Router) + TypeScript + React Query + MUI Data Grid
-- **API**: FastAPI (Python 3.11). Endpoints:
-  - `GET /healthz`
-  - `POST /v1/uploads/presign` → returns S3 (MinIO) pre‑signed PUT URL (local dev)
-  - `POST /v1/documents` → persists a document record
-- **Worker**: Typer CLI stubs + PyMuPDF placeholder for future pipelines
+- Uploads capped by `PDF_MAX_MB`
+- Background processing up to Netlify limit (15 min)
+- OCR is optional (WASM); keep pages and DPI constrained in config
 
-## Security & Ops (baseline)
+## Local & Netlify
 
-- CORS restricted via env, least‑privileged S3 creds
-- Structured logging, basic health checks
-- CI: GitHub Actions (Node + Python), caches deps
-- Dockerized local dev: Postgres, MinIO, LocalStack (SQS stub)
+- Set Netlify site env `NEXT_PUBLIC_API_URL` to the functions base (e.g. `/api` in this setup).
+- CORS restricted via `ALLOWED_ORIGINS`. Functions respond to `OPTIONS` preflight.
 
-Apache‑2.0 License.
+## CI
+
+- Unit tests (Vitest)
+- Integration: synthetic PDF (pdfkit)
+- E2E: Playwright (upload ➜ status ➜ download).
+
+Artifacts: Playwright report is uploaded in GitHub Actions.
+
+## Storage Defaults
+
+- Prefixes: `incoming/`, `processed/`, `exports/`
+- Prefer **Cloudflare R2**; AWS S3 fallback when `R2_S3_ENDPOINT` is unset.
