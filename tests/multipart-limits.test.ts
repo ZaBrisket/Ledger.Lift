@@ -37,6 +37,9 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: (...args: unknown[]) => getSignedUrlMock(...args),
 }));
 
+const MAX_PROCESSABLE_BYTES = 5 * 1024 ** 3 * 10_000;
+const MAX_PROCESSABLE_MB = String(MAX_PROCESSABLE_BYTES / 1024 / 1024);
+
 const eventBase = {
   headers: { origin: baseEnv.ALLOWED_ORIGINS },
   isBase64Encoded: false,
@@ -53,9 +56,10 @@ describe('multipart limits', () => {
   });
 
   it('handles 50TB file at boundary', async () => {
-    const fiftyTb = 50 * 1024 ** 4;
+    const maxBoundary = MAX_PROCESSABLE_BYTES;
     const { handler } = await loadModule<typeof import('../netlify/functions/initiate-upload')>(
-      '../netlify/functions/initiate-upload'
+      '../netlify/functions/initiate-upload',
+      { PDF_MAX_MB: MAX_PROCESSABLE_MB, NEXT_PUBLIC_PDF_MAX_MB: MAX_PROCESSABLE_MB }
     );
 
     const response = await handler(
@@ -64,7 +68,7 @@ describe('multipart limits', () => {
         httpMethod: 'POST',
         body: JSON.stringify({
           filename: 'huge.pdf',
-          size: fiftyTb,
+          size: maxBoundary,
           contentType: 'application/pdf',
           sha256: 'c'.repeat(64),
           sha256Base64: `${'C'.repeat(43)}=`,
@@ -81,9 +85,10 @@ describe('multipart limits', () => {
   });
 
   it('rejects 50TB + 1 byte', async () => {
-    const fiftyTbPlus = 50 * 1024 ** 4 + 1;
+    const justOverBoundary = MAX_PROCESSABLE_BYTES + 1;
     const { handler } = await loadModule<typeof import('../netlify/functions/initiate-upload')>(
-      '../netlify/functions/initiate-upload'
+      '../netlify/functions/initiate-upload',
+      { PDF_MAX_MB: MAX_PROCESSABLE_MB, NEXT_PUBLIC_PDF_MAX_MB: MAX_PROCESSABLE_MB }
     );
 
     const response = await handler(
@@ -92,7 +97,7 @@ describe('multipart limits', () => {
         httpMethod: 'POST',
         body: JSON.stringify({
           filename: 'too-big.pdf',
-          size: fiftyTbPlus,
+          size: justOverBoundary,
           contentType: 'application/pdf',
           sha256: 'd'.repeat(64),
           sha256Base64: `${'D'.repeat(43)}=`,
