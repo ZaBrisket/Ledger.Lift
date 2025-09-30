@@ -10,6 +10,13 @@ try:
     from rq import Queue
     from rq.job import Job
     from rq.retry import Retry
+    from rq.registry import (
+        DeferredJobRegistry,
+        FailedJobRegistry,
+        FinishedJobRegistry,
+        ScheduledJobRegistry,
+        StartedJobRegistry,
+    )
 except ImportError:  # pragma: no cover
     class Retry:  # type: ignore
         def __init__(self, max: int, interval):
@@ -29,11 +36,35 @@ except ImportError:  # pragma: no cover
         def save_meta(self):
             return None
 
+    class _StubRegistry:  # type: ignore
+        def __init__(self, queue: str, connection=None):
+            self.queue = queue
+            self.connection = connection
+
+        def count(self) -> int:
+            return 0
+
+    class StartedJobRegistry(_StubRegistry):
+        ...
+
+    class FinishedJobRegistry(_StubRegistry):
+        ...
+
+    class FailedJobRegistry(_StubRegistry):
+        ...
+
+    class DeferredJobRegistry(_StubRegistry):
+        ...
+
+    class ScheduledJobRegistry(_StubRegistry):
+        ...
+
     class Queue:  # type: ignore
         def __init__(self, name: str, connection=None, default_timeout=None):
             self.name = name
             self.connection = connection
             self.default_timeout = default_timeout
+            self._jobs: list[Job] = []
 
         def enqueue(
             self,
@@ -47,7 +78,7 @@ except ImportError:  # pragma: no cover
             description=None,
             result_ttl=None,
         ):
-            return Job(
+            job = Job(
                 job_id=job_id or "stub-job",
                 origin=self.name,
                 connection=self.connection,
@@ -55,10 +86,21 @@ except ImportError:  # pragma: no cover
                 args=args,
                 kwargs=kwargs,
             )
+            self._jobs.append(job)
+            return job
+            
+        def count(self) -> int:
+            return len(self._jobs)
 
 from apps.worker.config import settings
 from apps.worker.infra.redis import get_redis_connection, is_emergency_stopped
-from apps.worker.metrics import record_dead_letter, record_enqueue, record_retry_scheduled
+from apps.worker.metrics import (
+    record_dead_letter,
+    record_enqueue,
+    record_retry_scheduled,
+    update_queue_depth,
+    update_workers_busy,
+)
 
 
 @dataclass(frozen=True)
@@ -85,6 +127,54 @@ def get_queue(priority: str, *, connection=None, job_timeout: Optional[int] = No
             name = queues.default
     connection = connection or get_redis_connection()
     return Queue(name, connection=connection, default_timeout=job_timeout)
+
+
+@dataclass(frozen=True)
+class JobRegistries:
+    """Holds handles to relevant RQ job registries for a queue."""
+
+    started: StartedJobRegistry
+    finished: FinishedJobRegistry
+    failed: FailedJobRegistry
+    deferred: DeferredJobRegistry
+    scheduled: ScheduledJobRegistry
+
+
+def get_job_registries(queue_name: str, *, connection=None) -> JobRegistries:
+    """Return registries for the provided queue name."""
+
+    conn = connection or get_redis_connection()
+    return JobRegistries(
+        started=StartedJobRegistry(queue_name, connection=conn),
+        finished=FinishedJobRegistry(queue_name, connection=conn),
+        failed=FailedJobRegistry(queue_name, connection=conn),
+        deferred=DeferredJobRegistry(queue_name, connection=conn),
+        scheduled=ScheduledJobRegistry(queue_name, connection=conn),
+    )
+
+
+def _safe_metric_value(value) -> int:
+    if callable(value):
+        try:
+            return int(value())
+        except Exception:  # pragma: no cover - defensive programming
+            return 0
+    try:
+        return int(value)
+    except Exception:  # pragma: no cover - defensive programming
+        return 0
+
+
+def record_queue_state(queue: Queue) -> None:
+    """Update gauges for queue depth and workers busy."""
+
+    depth_getter = getattr(queue, "count", None)
+    depth = _safe_metric_value(depth_getter) if depth_getter is not None else 0
+    update_queue_depth(queue.name, depth)
+
+    registries = get_job_registries(queue.name, connection=queue.connection)
+    busy = _safe_metric_value(getattr(registries.started, "count", None))
+    update_workers_busy(queue.name, busy)
 
 
 def compute_backoff_intervals(
@@ -136,6 +226,10 @@ def _dead_letter_callback(job: Job, exc_type: Optional[type], exc_value: Optiona
     job.meta["dead_letter"] = True
     job.save_meta()
     record_dead_letter(job.origin or settings.rq_default_queue)
+    try:
+        record_queue_state(Queue(job.origin, connection=job.connection))
+    except Exception:  # pragma: no cover - defensive safety when queue can't be instantiated
+        pass
 
 
 def enqueue_with_retry(
@@ -185,4 +279,5 @@ def enqueue_with_retry(
         result_ttl=0,
     )
     record_enqueue(queue.name, priority)
+    record_queue_state(queue)
     return job
