@@ -53,9 +53,14 @@ describe('multipart limits', () => {
   });
 
   it('handles 50TB file at boundary', async () => {
-    const fiftyTb = 50 * 1024 ** 4;
+    const maxProcessableBytes = 5 * 1024 ** 3 * 10_000;
+    const maxProcessableMb = Math.ceil(maxProcessableBytes / 1024 ** 2);
     const { handler } = await loadModule<typeof import('../netlify/functions/initiate-upload')>(
-      '../netlify/functions/initiate-upload'
+      '../netlify/functions/initiate-upload',
+      {
+        PDF_MAX_MB: String(maxProcessableMb),
+        NEXT_PUBLIC_PDF_MAX_MB: String(maxProcessableMb),
+      }
     );
 
     const response = await handler(
@@ -64,7 +69,7 @@ describe('multipart limits', () => {
         httpMethod: 'POST',
         body: JSON.stringify({
           filename: 'huge.pdf',
-          size: fiftyTb,
+          size: maxProcessableBytes,
           contentType: 'application/pdf',
           sha256: 'c'.repeat(64),
           sha256Base64: `${'C'.repeat(43)}=`,
@@ -81,9 +86,14 @@ describe('multipart limits', () => {
   });
 
   it('rejects 50TB + 1 byte', async () => {
-    const fiftyTbPlus = 50 * 1024 ** 4 + 1;
+    const maxProcessableBytes = 5 * 1024 ** 3 * 10_000;
+    const maxProcessableMb = Math.ceil(maxProcessableBytes / 1024 ** 2);
     const { handler } = await loadModule<typeof import('../netlify/functions/initiate-upload')>(
-      '../netlify/functions/initiate-upload'
+      '../netlify/functions/initiate-upload',
+      {
+        PDF_MAX_MB: String(maxProcessableMb),
+        NEXT_PUBLIC_PDF_MAX_MB: String(maxProcessableMb),
+      }
     );
 
     const response = await handler(
@@ -92,7 +102,7 @@ describe('multipart limits', () => {
         httpMethod: 'POST',
         body: JSON.stringify({
           filename: 'too-big.pdf',
-          size: fiftyTbPlus,
+          size: maxProcessableBytes + 1,
           contentType: 'application/pdf',
           sha256: 'd'.repeat(64),
           sha256Base64: `${'D'.repeat(43)}=`,

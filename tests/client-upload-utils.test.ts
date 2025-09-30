@@ -56,7 +56,7 @@ describe('client upload utilities', () => {
     await vi.advanceTimersByTimeAsync(1000);
     const etag = await promise;
 
-    expect(etag).toBe('"abc123"');
+    expect(etag).toBe('abc123');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

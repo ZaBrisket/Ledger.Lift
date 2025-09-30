@@ -373,6 +373,8 @@ async function uploadSingleWithProgress(
   });
 }
 
+const normalizeEtag = (etag: string) => etag.replace(/^"|"$/g, '');
+
 export async function uploadPartWithRetry(
   url: string,
   chunk: Blob,
@@ -393,7 +395,7 @@ export async function uploadPartWithRetry(
           throw new Error('Missing ETag');
         }
 
-        return etag;
+        return normalizeEtag(etag);
       }
 
       if (response.status < 500) {
