@@ -7,7 +7,15 @@ from typing import Dict, List, Optional
 from uuid import uuid4
 
 SCHEMA_VERSION = 1
-JOB_VERSION = "1.0.0"
+JOB_VERSION = 1
+
+
+def _default_timestamp() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _generate_job_id() -> str:
+    return str(uuid4())
 
 
 @dataclass(slots=True)
@@ -15,14 +23,14 @@ class JobPayload:
     """Payload persisted to Redis queues."""
 
     document_id: str
-    priority: str
-    user_id: Optional[str]
+    priority: str = "default"
+    user_id: Optional[str] = None
+    created_at: datetime = field(default_factory=_default_timestamp)
+    schema_version: int = SCHEMA_VERSION
+    version: int = JOB_VERSION
     p95_hint_ms: Optional[int] = None
     content_hashes: List[str] = field(default_factory=list)
-    job_id: str = field(default_factory=lambda: str(uuid4()))
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    version: str = JOB_VERSION
-    schema_version: int = SCHEMA_VERSION
+    job_id: str = field(default_factory=_generate_job_id)
 
     def to_dict(self) -> Dict[str, object]:
         """Convert payload to a serializable dictionary."""

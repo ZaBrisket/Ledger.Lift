@@ -1,7 +1,7 @@
 import random
 
-from apps.worker.metrics import DEAD_LETTER_TOTAL
-from apps.worker.queues import compute_backoff_intervals, enqueue_with_retry
+from apps.worker.metrics import DEAD_LETTER_TOTAL, QUEUE_DEPTH, WORKERS_BUSY
+from apps.worker.queues import JobRegistries, compute_backoff_intervals, enqueue_with_retry
 
 
 def _metric_value(metric, **labels):
@@ -44,6 +44,20 @@ class DummyJob:
         return None
 
 
+class DummyRegistry:
+    def __init__(self, count: int = 0):
+        self._count = count
+
+    def count(self) -> int:
+        return self._count
+
+
+def _registries(started: int = 0) -> JobRegistries:
+    reg = DummyRegistry(started)
+    zero = DummyRegistry(0)
+    return JobRegistries(started=reg, finished=zero, failed=zero, deferred=zero, scheduled=zero)
+
+
 def test_enqueue_failure_moves_to_dead_letter_and_records_metrics(monkeypatch):
     connection = DummyConnection()
 
@@ -53,6 +67,7 @@ def test_enqueue_failure_moves_to_dead_letter_and_records_metrics(monkeypatch):
             self.connection = connection
             self.default_timeout = default_timeout
             self.enqueued = None
+            self.jobs = []
 
         def enqueue(self, func, args=(), kwargs=None, job_id=None, retry=None, failure_callback=None, meta=None, description=None, result_ttl=None):
             self.enqueued = {
@@ -63,13 +78,18 @@ def test_enqueue_failure_moves_to_dead_letter_and_records_metrics(monkeypatch):
                 "meta": meta or {},
             }
             job = DummyJob(job_id or "job-id", self.name, connection)
+            self.jobs.append(job)
             # Simulate immediate failure and invoke callback
             failure_callback(job, ValueError, ValueError("boom"), None)
             return job
 
+        def count(self) -> int:
+            return len(self.jobs)
+
     monkeypatch.setattr("apps.worker.queues.Queue", DummyQueue)
     monkeypatch.setattr("apps.worker.queues.get_redis_connection", lambda: connection)
     monkeypatch.setattr("apps.worker.queues.is_emergency_stopped", lambda *_: False)
+    monkeypatch.setattr("apps.worker.queues.get_job_registries", lambda name, connection=None: _registries())
 
     before_dead = _metric_value(DEAD_LETTER_TOTAL, queue="default")
 
@@ -78,3 +98,32 @@ def test_enqueue_failure_moves_to_dead_letter_and_records_metrics(monkeypatch):
     assert job.meta["dead_letter"] is True
     assert connection.hashes.get("deadletter:dead", {}).get(job.id)
     assert _metric_value(DEAD_LETTER_TOTAL, queue="default") == before_dead + 1
+
+
+def test_enqueue_updates_queue_depth_and_worker_gauge(monkeypatch):
+    connection = DummyConnection()
+
+    class SuccessfulQueue:
+        def __init__(self, name: str, connection=None, default_timeout=None):
+            self.name = name
+            self.connection = connection
+            self.default_timeout = default_timeout
+            self.jobs: list[DummyJob] = []
+
+        def enqueue(self, func, args=(), kwargs=None, job_id=None, retry=None, failure_callback=None, meta=None, description=None, result_ttl=None):
+            job = DummyJob(job_id or "job-id", self.name, connection)
+            self.jobs.append(job)
+            return job
+
+        def count(self) -> int:
+            return len(self.jobs)
+
+    monkeypatch.setattr("apps.worker.queues.Queue", SuccessfulQueue)
+    monkeypatch.setattr("apps.worker.queues.get_redis_connection", lambda: connection)
+    monkeypatch.setattr("apps.worker.queues.is_emergency_stopped", lambda *_: False)
+    monkeypatch.setattr("apps.worker.queues.get_job_registries", lambda name, connection=None: _registries(started=3))
+
+    enqueue_with_retry(lambda: None, priority="high", max_retries=1)
+
+    assert _metric_value(QUEUE_DEPTH, queue="high") == 1
+    assert _metric_value(WORKERS_BUSY, queue="high") == 3

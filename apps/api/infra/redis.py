@@ -6,7 +6,7 @@ from typing import Optional
 
 import redis
 
-from apps.api.config import get_settings, settings
+from apps.api.config import get_settings
 
 
 @lru_cache
@@ -21,5 +21,6 @@ def get_redis_connection(url: Optional[str] = None) -> redis.Redis:
 def is_emergency_stopped(conn: Optional[redis.Redis] = None) -> bool:
     """Check whether the emergency stop flag is set."""
 
+    settings = get_settings()
     connection = conn or get_redis_connection()
     return bool(connection.exists(settings.emergency_stop_key))
