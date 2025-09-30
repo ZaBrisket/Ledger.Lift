@@ -10,8 +10,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "echo \"Use package-level builds\"",
     "lint": "echo \"Use package-level linters\"",
+    "build": "echo \"Use package-level builds\"",
     "test": "vitest run"
   },
   "dependencies": {
