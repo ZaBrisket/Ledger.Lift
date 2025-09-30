@@ -379,6 +379,8 @@ export async function uploadPartWithRetry(
   partNumber: number,
   maxRetries = 3
 ): Promise<string> {
+  const normalizeEtag = (etag: string) => etag.replace(/^"|"$/g, '');
+
   for (let attempt = 0; attempt < maxRetries; attempt += 1) {
     try {
       const response = await fetch(url, {
@@ -393,7 +395,7 @@ export async function uploadPartWithRetry(
           throw new Error('Missing ETag');
         }
 
-        return etag;
+        return normalizeEtag(etag);
       }
 
       if (response.status < 500) {
