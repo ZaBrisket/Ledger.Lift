@@ -1,15 +1,18 @@
-"""
-Document processing routes for queue-based processing.
-"""
+"""Document processing routes for queue-based processing."""
 import logging
 import time
-import os
-from typing import Optional
+
 from fastapi import APIRouter, HTTPException, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from ..services import DocumentService
+from apps.api.config import settings as api_settings
+from apps.api.infra.redis import get_redis_connection, is_emergency_stopped
+from apps.api.app.jobs import JobPayload
+from apps.api.app.progress import write_progress_snapshot
+from apps.api.metrics import record_enqueue, record_enqueue_failure
+from apps.worker.queues import enqueue_with_retry
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -57,59 +60,95 @@ def trigger_document_processing(request: Request, doc_id: str):
                     "message": "Document not found"
                 }
             )
-        
-        # Check if queue is available
-        redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
-        if not redis_url:
+
+        if not api_settings.features_t1_queue:
             raise HTTPException(
                 status_code=503,
                 detail={
-                    "error": "QUEUE_UNAVAILABLE",
-                    "message": "Processing queue not available"
+                    "error": "QUEUE_DISABLED",
+                    "message": "Queueing is temporarily disabled"
                 }
             )
-        
-        # Import here to avoid circular imports
+
+        connection = get_redis_connection()
+        if is_emergency_stopped(connection):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "EMERGENCY_STOP",
+                    "message": "Processing temporarily halted"
+                }
+            )
+
+        priority = request.query_params.get("priority", "default").lower()
+        if priority not in {"high", "default", "low"}:
+            priority = "default"
+
+        payload = JobPayload(
+            document_id=doc_id,
+            priority=priority,
+            user_id=request.headers.get("x-user-id")
+        )
+
         try:
-            from celery import Celery
-            celery_app = Celery('ledger_lift_worker', broker=redis_url)
-            
-            # Queue the document for processing
-            result = celery_app.send_task(
-                'worker.tasks.process_document_task',
-                args=[doc_id],
-                queue='document_processing'
+            job = enqueue_with_retry(
+                "worker.jobs.process_document_job",
+                kwargs={
+                    "document_id": doc_id,
+                    "job_payload": payload.to_dict()
+                },
+                priority=priority,
+                job_id=payload.job_id,
+                metadata=payload.redis_metadata(),
+                job_timeout=max(1, api_settings.parse_timeout_ms // 1000),
+                connection=connection
             )
-            
-            processing_time = time.time() - start_time
-            
-            logger.info(f"Document queued for processing: {doc_id} (task_id: {result.id})")
-            
-            return {
-                "success": True,
-                "document_id": doc_id,
-                "task_id": result.id,
-                "message": "Document queued for processing",
-                "processing_time_ms": round(processing_time * 1000, 2)
-            }
-            
-        except ImportError:
+        except RuntimeError as queue_error:
+            logger.error("Failed to enqueue job due to emergency stop", exc_info=True)
+            record_enqueue_failure(priority)
             raise HTTPException(
                 status_code=503,
                 detail={
-                    "error": "QUEUE_UNAVAILABLE",
-                    "message": "Celery not available"
+                    "error": "QUEUE_HALTED",
+                    "message": str(queue_error)
                 }
-            )
+            ) from queue_error
         except Exception as queue_error:
             logger.error(f"Failed to queue document {doc_id}: {queue_error}")
+            record_enqueue_failure(priority)
             raise HTTPException(
                 status_code=503,
                 detail={
                     "error": "QUEUE_ERROR",
                     "message": "Failed to queue document for processing"
                 }
-            )
+            ) from queue_error
+
+        processing_time = time.time() - start_time
+        write_progress_snapshot(
+            job.id,
+            {
+                "state": "queued",
+                "document_id": doc_id,
+                "priority": priority
+            },
+            connection=connection
+        )
+        record_enqueue(job.origin or "default", priority)
+
+        logger.info(
+            "Document queued for processing",
+            extra={"document_id": doc_id, "job_id": job.id, "priority": priority}
+        )
+
+        return {
+            "success": True,
+            "document_id": doc_id,
+            "task_id": job.id,
+            "queue": job.origin,
+            "message": "Document queued for processing",
+            "processing_time_ms": round(processing_time * 1000, 2)
+        }
         
     except HTTPException:
         raise
@@ -146,53 +185,42 @@ def get_task_status(task_id: str):
     task_id = task_id.strip()
     
     try:
-        # Check if queue is available
-        redis_url = os.getenv('REDIS_URL', 'redis://redis:6379/0')
-        if not redis_url:
-            raise HTTPException(
-                status_code=503,
-                detail={
-                    "error": "QUEUE_UNAVAILABLE",
-                    "message": "Processing queue not available"
-                }
-            )
-        
+        connection = get_redis_connection()
+
         try:
-            from celery import Celery
-            celery_app = Celery('ledger_lift_worker', broker=redis_url)
-            
-            # Get task result
-            result = celery_app.AsyncResult(task_id)
-            
-            processing_time = time.time() - start_time
-            
-            return {
-                "task_id": task_id,
-                "status": result.status,
-                "ready": result.ready(),
-                "successful": result.successful() if result.ready() else None,
-                "failed": result.failed() if result.ready() else None,
-                "result": result.result if result.ready() else None,
-                "processing_time_ms": round(processing_time * 1000, 2)
-            }
-            
-        except ImportError:
+            from rq.job import Job
+            from rq.exceptions import NoSuchJobError
+        except ImportError as exc:  # pragma: no cover - should always be available
             raise HTTPException(
                 status_code=503,
                 detail={
                     "error": "QUEUE_UNAVAILABLE",
-                    "message": "Celery not available"
+                    "message": "RQ not available"
                 }
-            )
-        except Exception as queue_error:
-            logger.error(f"Failed to get task status for {task_id}: {queue_error}")
+            ) from exc
+
+        try:
+            job = Job.fetch(task_id, connection=connection)
+        except NoSuchJobError:
             raise HTTPException(
-                status_code=503,
+                status_code=404,
                 detail={
-                    "error": "QUEUE_ERROR",
-                    "message": "Failed to get task status"
+                    "error": "NOT_FOUND",
+                    "message": "Task not found"
                 }
             )
+
+        processing_time = time.time() - start_time
+        status = job.get_status()
+        return {
+            "task_id": task_id,
+            "status": status,
+            "result": job.result if job.is_finished else None,
+            "failed": job.is_failed,
+            "successful": job.is_finished and not job.is_failed,
+            "meta": job.meta,
+            "processing_time_ms": round(processing_time * 1000, 2)
+        }
         
     except HTTPException:
         raise
