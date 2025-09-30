@@ -11,6 +11,20 @@
   ],
   "scripts": {
     "lint": "echo \"Use package-level linters\"",
-    "build": "echo \"Use package-level builds\""
+    "build": "echo \"Use package-level builds\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.609.0",
+    "@aws-sdk/s3-request-presigner": "3.609.0",
+    "@netlify/functions": "2.6.1",
+    "file-type": "19.2.0",
+    "undici": "6.19.8",
+    "uuid": "9.0.1",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "5.5.4",
+    "vitest": "1.6.0"
   }
 }
