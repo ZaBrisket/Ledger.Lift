@@ -27,6 +27,8 @@ class Document(Base):
     content_type: Mapped[str] = mapped_column(String, nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256_hash: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    sha256_raw: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    sha256_canonical: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
     processing_status: Mapped[ProcessingStatus] = mapped_column(Enum(ProcessingStatus), default=ProcessingStatus.UPLOADED)
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())

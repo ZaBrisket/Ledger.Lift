@@ -1,0 +1,22 @@
+[
+  {
+    "headers": ["", "Q1 2023", "Q2 2023", "FY 2023"],
+    "rows": [
+      ["Revenue", "$1,200", "$1,400", "$5,600"],
+      ["Cost of Goods Sold", "(500)", "(600)", "(2,200)"],
+      ["Gross Profit", "$700", "$800", "$3,400"],
+      ["Operating Income", "$200", "$250", "$1,000"],
+      ["Net Income", "$150", "$200", "$850"]
+    ],
+    "label": "financial"
+  },
+  {
+    "headers": ["Task", "Owner", "Status"],
+    "rows": [
+      ["Update homepage", "Alice", "In Progress"],
+      ["Email campaign", "Bob", "Queued"],
+      ["Customer interviews", "Eve", "Done"]
+    ],
+    "label": "generic"
+  }
+]

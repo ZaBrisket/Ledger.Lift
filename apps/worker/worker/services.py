@@ -12,6 +12,9 @@ from contextlib import contextmanager
 from typing import Optional, List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import pandas as pd
+from apps.worker.config import settings
+from apps.worker.financial import FinancialTableDetector, TableCandidate
+from apps.worker.services.cas import compute_pdf_hashes
 from .database import WorkerDatabase
 from .aws_client import WorkerS3Client
 from .pipeline.render import render_pdf_preview
@@ -169,6 +172,9 @@ class DocumentProcessor:
     def __init__(self):
         self.db = WorkerDatabase()
         self.s3 = WorkerS3Client()
+        self._financial_detector = None
+        if settings.features_t1_financial_detector:
+            self._financial_detector = FinancialTableDetector(use_ml=settings.features_t1_financial_ml)
         self._processing_stats = {
             'total_processed': 0,
             'successful_processed': 0,
@@ -240,6 +246,46 @@ class DocumentProcessor:
                 processing_metadata['stages_completed'].append('s3_download')
                 processing_metadata['pdf_size'] = len(pdf_content)
                 
+                cas_hashes = compute_pdf_hashes(pdf_content)
+                processing_metadata['sha256_raw'] = cas_hashes.sha256_raw
+                if cas_hashes.sha256_canonical:
+                    processing_metadata['sha256_canonical'] = cas_hashes.sha256_canonical
+                try:
+                    self.db.update_document_hashes(doc_id, cas_hashes.sha256_raw, cas_hashes.sha256_canonical)
+                except Exception as cas_error:
+                    logger.warning('Failed to persist CAS hashes for %s: %s', doc_id, cas_error)
+                duplicate_doc = None
+                try:
+                    duplicate_doc = self.db.find_document_by_hash(
+                        sha_raw=cas_hashes.sha256_raw,
+                        sha_canonical=cas_hashes.sha256_canonical,
+                        exclude_id=doc_id,
+                    )
+                except Exception as lookup_error:
+                    logger.warning('CAS lookup failed for %s: %s', doc_id, lookup_error)
+
+                if duplicate_doc:
+                    processing_metadata['stages_completed'].append('cas_dedup')
+                    processing_metadata['cas_duplicate'] = True
+                    self._log_event_safe(
+                        doc_id,
+                        EventType.PROCESSING_COMPLETED,
+                        'CAS duplicate detected',
+                        {**processing_metadata, 'duplicate_of': duplicate_doc.id},
+                    )
+                    self._update_status_safe(doc_id, ProcessingStatus.COMPLETED, processing_metadata)
+                    processing_time = time.time() - start_time
+                    processing_metadata.update({
+                        'success': True,
+                        'processing_time': processing_time,
+                        'end_time': time.time(),
+                        'deduplicated': True,
+                        'duplicate_of': duplicate_doc.id,
+                    })
+                    self._record_processing_stats(success=True, processing_time=processing_time)
+                    logger.info('CAS dedup hit for %s; matched %s', doc_id, duplicate_doc.id)
+                    return processing_metadata
+
                 # Stage 4: Create temporary file for processing
                 tmp_path = resource_manager.create_temp_file(suffix='.pdf')
                 with open(tmp_path, 'wb') as tmp_file:
@@ -528,7 +574,28 @@ class DocumentProcessor:
                     df = pd.DataFrame(table['data'])
                     transformed_df = apply_ledger_transformations(df)
                     table['data'] = transformed_df.to_dict('records')
-                
+
+                if self._financial_detector and table.get('data'):
+                    candidate = TableCandidate.from_records(table['data'])
+                    detection = self._financial_detector.score(candidate)
+                    detection_payload = {
+                        'score': detection.score,
+                        'features': detection.features,
+                        'keyword_hits': detection.keyword_hits,
+                        'confidence': detection.confidence,
+                        'is_financial': detection.is_financial,
+                    }
+                    if detection.confidence != 'high':
+                        detection_payload['requires_review'] = True
+                    table['financial_detection'] = detection_payload
+                    if detection.is_financial:
+                        metadata.setdefault('financial_tables', []).append({
+                            'score': detection.score,
+                            'confidence': detection.confidence,
+                            'requires_review': detection.confidence != 'high',
+                            'engine': table.get('engine'),
+                        })
+
                 # Store as artifact
                 self.db.create_artifact(
                     document_id=doc_id,
@@ -538,7 +605,7 @@ class DocumentProcessor:
                     data=json.dumps(table),
                     page_id=None  # Will be linked to page if available
                 )
-                
+
             logger.debug(f"Stored {len(tables)} table artifacts for {doc_id}")
             
         except Exception as e:

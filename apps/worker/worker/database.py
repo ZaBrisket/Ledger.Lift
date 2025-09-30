@@ -15,6 +15,8 @@ class Document(Base):
     content_type: Mapped[str] = mapped_column(String, nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256_hash: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    sha256_raw: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    sha256_canonical: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
     processing_status: Mapped[ProcessingStatus] = mapped_column(Enum(ProcessingStatus), default=ProcessingStatus.UPLOADED)
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -133,3 +135,31 @@ class WorkerDatabase:
             session.add(artifact)
             session.commit()
             return artifact
+    def update_document_hashes(self, doc_id: str, sha_raw: str, sha_canonical: str | None) -> None:
+        with self.SessionLocal() as session:
+            doc = session.query(Document).filter(Document.id == doc_id).first()
+            if not doc:
+                return
+            doc.sha256_raw = sha_raw
+            doc.sha256_canonical = sha_canonical
+            session.commit()
+
+    def find_document_by_hash(self, sha_raw: str | None = None, sha_canonical: str | None = None, *, exclude_id: str | None = None):
+        if not sha_raw and not sha_canonical:
+            return None
+        with self.SessionLocal() as session:
+            query = session.query(Document)
+            conditions = []
+            if sha_raw:
+                conditions.append(Document.sha256_raw == sha_raw)
+                conditions.append(Document.sha256_hash == sha_raw)
+            if sha_canonical:
+                conditions.append(Document.sha256_canonical == sha_canonical)
+            if not conditions:
+                return None
+            from sqlalchemy import or_
+
+            q = query.filter(or_(*conditions))
+            if exclude_id:
+                q = q.filter(Document.id != exclude_id)
+            return q.first()

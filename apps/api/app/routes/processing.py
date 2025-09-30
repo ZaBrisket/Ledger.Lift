@@ -13,6 +13,7 @@ from apps.api.app.jobs import JobPayload
 from apps.api.app.progress import write_progress_snapshot
 from apps.api.metrics import record_enqueue, record_enqueue_failure
 from apps.worker.queues import enqueue_with_retry
+from apps.api.services.progress_pubsub import estimate_p95_ms
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -84,10 +85,12 @@ def trigger_document_processing(request: Request, doc_id: str):
         if priority not in {"high", "default", "low"}:
             priority = "default"
 
+        p95_hint = estimate_p95_ms(connection=connection)
         payload = JobPayload(
             document_id=doc_id,
             priority=priority,
-            user_id=request.headers.get("x-user-id")
+            user_id=request.headers.get("x-user-id"),
+            p95_hint_ms=p95_hint
         )
 
         try:
