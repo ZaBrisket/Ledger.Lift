@@ -8,7 +8,7 @@ from slowapi.errors import RateLimitExceeded
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from .settings import CORS_ALLOWED_ORIGINS
-from .routes import health, uploads, documents, processing
+from .routes import health, uploads, documents, processing, jobs_events
 from .middleware import MetricsMiddleware, RequestIDMiddleware, LoggingMiddleware
 from apps.api.config import settings as api_settings
 
@@ -67,3 +67,4 @@ app.include_router(health.router)
 app.include_router(uploads.router)
 app.include_router(documents.router)
 app.include_router(processing.router)
+app.include_router(jobs_events.router)

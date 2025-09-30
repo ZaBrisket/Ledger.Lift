@@ -11,6 +11,9 @@ class WorkerConfig(BaseSettings):
     """Settings for the worker process."""
 
     features_t1_queue: bool = True
+    features_t1_financial_detector: bool = True
+    features_t1_financial_ml: bool = False
+    cas_normalize_pdf: bool = True
     redis_url: str = "redis://localhost:6379/0"
     rq_default_queue: str = "default"
     rq_high_queue: str = "high"
@@ -29,6 +32,9 @@ class WorkerConfig(BaseSettings):
         case_sensitive = False
         fields = {
             "features_t1_queue": {"env": "FEATURES_T1_QUEUE"},
+            "features_t1_financial_detector": {"env": "FEATURES_T1_FINANCIAL_DETECTOR"},
+            "features_t1_financial_ml": {"env": "FEATURES_T1_FINANCIAL_ML"},
+            "cas_normalize_pdf": {"env": "CAS_NORMALIZE_PDF"},
             "redis_url": {"env": "REDIS_URL"},
             "rq_default_queue": {"env": "RQ_DEFAULT_QUEUE"},
             "rq_high_queue": {"env": "RQ_HIGH_QUEUE"},

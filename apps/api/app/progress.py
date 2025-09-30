@@ -34,4 +34,10 @@ def write_progress_snapshot(
     conn.setex(key, ttl, serialized)
     conn.publish(PROGRESS_CHANNEL, serialized)
     record_progress_snapshot(snapshot.get("state", "unknown"))
+    if "duration" in snapshot:
+        try:
+            from apps.api.services.progress_pubsub import record_job_duration
+            record_job_duration(float(snapshot["duration"]), connection=conn)
+        except (TypeError, ValueError):
+            pass
     return json.loads(serialized)
