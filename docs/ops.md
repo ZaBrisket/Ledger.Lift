@@ -43,6 +43,15 @@ Both API and worker expose Prometheus metrics at `/metrics`. Configure `METRICS_
 - `ledger_lift_job_duration_seconds`
 - `ledger_lift_queue_depth`
 
+To run the worker metrics endpoint locally you can serve the lightweight ASGI app with uvicorn:
+
+```bash
+cd apps/worker
+uvicorn apps.worker.metrics_server:app --host 0.0.0.0 --port 8000
+```
+
+Prometheus scrapes the worker on the configured port (default `8000` in the provided docker compose file).
+
 ## Emergency Stop
 
 Create the Redis key defined by `EMERGENCY_STOP_KEY` to prevent new work from being accepted. Workers check the key between pipeline stages and exit gracefully when set.
