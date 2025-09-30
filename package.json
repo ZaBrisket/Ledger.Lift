@@ -10,14 +10,14 @@
     "packages/*"
   ],
   "scripts": {
-    "lint": "echo \"Use package-level linters\"",
     "build": "echo \"Use package-level builds\"",
+    "lint": "echo \"Use package-level linters\"",
     "test": "vitest run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.609.0",
     "@aws-sdk/s3-request-presigner": "3.609.0",
-    "@netlify/functions": "2.6.1",
+    "@netlify/functions": "4.2.6",
     "file-type": "19.2.0",
     "undici": "6.19.8",
     "uuid": "9.0.1",
