@@ -15,15 +15,18 @@ dependencies = [
   "pandas==2.2.0",
   "opencv-python==4.9.0.80",
   "ghostscript==0.7",
-  "celery==5.3.4",
   "redis==5.0.1",
-  "kombu==5.3.4",
+  "rq==1.16.1",
+  "prometheus-client==0.20.0",
+  "fastapi==0.111.0",
+  "uvicorn[standard]==0.30.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest==8.2.0",
-  "ruff==0.6.2"
+  "ruff==0.6.2",
+  "fakeredis==2.23.2"
 ]
 
 [tool.ruff]

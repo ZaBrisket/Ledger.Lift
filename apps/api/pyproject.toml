@@ -20,6 +20,8 @@ dependencies = [
   "openpyxl==3.1.2",
   "slowapi==0.1.9",
   "prometheus-client==0.20.0",
+  "redis==5.0.1",
+  "rq==1.16.1",
   "opentelemetry-api==1.21.0",
   "opentelemetry-sdk==1.21.0",
   "opentelemetry-instrumentation-fastapi==0.42b0",
@@ -34,7 +36,8 @@ include = ["app*"]
 dev = [
   "pytest==8.2.0",
   "httpx==0.27.0",
-  "ruff==0.6.2"
+  "ruff==0.6.2",
+  "fakeredis==2.23.2"
 ]
 
 [tool.ruff]
