@@ -129,10 +129,12 @@ def trigger_document_processing(request: Request, doc_id: str):
             job.id,
             {
                 "state": "queued",
+                "status": "queued",
                 "document_id": doc_id,
-                "priority": priority
+                "priority": priority,
+                "progress": 0,
             },
-            connection=connection
+            connection=connection,
         )
         record_enqueue(job.origin or "default", priority)
 

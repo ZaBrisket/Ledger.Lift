@@ -1,14 +1,15 @@
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from .settings import CORS_ALLOWED_ORIGINS
 from .routes import health, uploads, documents, processing
 from .middleware import MetricsMiddleware, RequestIDMiddleware, LoggingMiddleware
-from .metrics import get_metrics_collector
 from apps.api.config import settings as api_settings
 
 # Initialize rate limiter
@@ -36,7 +37,7 @@ app.add_middleware(
 
 # Add metrics endpoint
 @app.get("/metrics")
-def get_metrics(credentials: HTTPBasicCredentials = Depends(basic_auth)):
+def get_metrics(credentials: HTTPBasicCredentials = Depends(basic_auth)) -> Response:
     """Prometheus metrics endpoint with optional basic auth."""
 
     if api_settings.metrics_auth:
@@ -60,7 +61,7 @@ def get_metrics(credentials: HTTPBasicCredentials = Depends(basic_auth)):
                 headers={"WWW-Authenticate": "Basic"},
             )
 
-    return get_metrics_collector().get_metrics_response()
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 app.include_router(health.router)
 app.include_router(uploads.router)

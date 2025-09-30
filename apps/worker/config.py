@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings
 class WorkerConfig(BaseSettings):
     """Settings for the worker process."""
 
+    features_t1_queue: bool = True
     redis_url: str = "redis://localhost:6379/0"
     rq_default_queue: str = "default"
     rq_high_queue: str = "high"
@@ -20,12 +21,14 @@ class WorkerConfig(BaseSettings):
     parse_timeout_ms: int = 300_000
     metrics_auth: Optional[str] = None
     emergency_stop_key: str = "EMERGENCY_STOP"
+    job_progress_ttl_seconds: int = 3600
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
         fields = {
+            "features_t1_queue": {"env": "FEATURES_T1_QUEUE"},
             "redis_url": {"env": "REDIS_URL"},
             "rq_default_queue": {"env": "RQ_DEFAULT_QUEUE"},
             "rq_high_queue": {"env": "RQ_HIGH_QUEUE"},
@@ -36,6 +39,7 @@ class WorkerConfig(BaseSettings):
             "parse_timeout_ms": {"env": "PARSE_TIMEOUT_MS"},
             "metrics_auth": {"env": "METRICS_AUTH"},
             "emergency_stop_key": {"env": "EMERGENCY_STOP_KEY"},
+            "job_progress_ttl_seconds": {"env": "JOB_PROGRESS_TTL_SECONDS"},
         }
 
 

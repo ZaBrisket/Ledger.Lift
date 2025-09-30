@@ -21,7 +21,6 @@ def get_redis_connection(url: Optional[str] = None) -> redis.Redis:
 def is_emergency_stopped(conn: Optional[redis.Redis] = None) -> bool:
     """Check whether the emergency stop flag is set."""
 
-    from apps.worker.config import settings as worker_settings
-
+    settings = get_settings()
     connection = conn or get_redis_connection()
-    return bool(connection.exists(worker_settings.emergency_stop_key))
+    return bool(connection.exists(settings.emergency_stop_key))
