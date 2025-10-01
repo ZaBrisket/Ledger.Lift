@@ -18,6 +18,7 @@ dependencies = [
   "redis==5.0.1",
   "rq==1.15.1",
   "prometheus-client==0.20.0",
+  "requests==2.32.3",
 ]
 
 [project.optional-dependencies]

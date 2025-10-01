@@ -231,7 +231,18 @@ class DocumentProcessor:
             'stages_completed': [],
             'errors': []
         }
-        
+
+        if settings.features_t2_ocr:
+            try:
+                from apps.worker.ocr import get_ocr_runtime
+
+                ocr_runtime = get_ocr_runtime()
+            except Exception as ocr_error:  # pragma: no cover - defensive logging
+                logger.warning('OCR provider unavailable for %s: %s', doc_id, ocr_error)
+                processing_metadata['ocr_provider_error'] = str(ocr_error)
+            else:
+                processing_metadata['ocr_provider'] = ocr_runtime.provider_name
+
         logger.info(f"Starting document processing: {doc_id}")
         
         try:
