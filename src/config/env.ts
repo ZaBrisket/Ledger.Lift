@@ -19,9 +19,14 @@ const envSchema = z
     PDF_MAX_MB: z.coerce
       .number({ invalid_type_error: 'PDF_MAX_MB must be a number' })
       .positive('PDF_MAX_MB must be greater than 0'),
-    NEXT_PUBLIC_PDF_MAX_MB: z.coerce
-      .number({ invalid_type_error: 'NEXT_PUBLIC_PDF_MAX_MB must be a number' })
-      .positive('NEXT_PUBLIC_PDF_MAX_MB must be greater than 0'),
+    NEXT_PUBLIC_PDF_MAX_MB: z
+      .preprocess(
+        (value) => (value === '' || typeof value === 'undefined' ? undefined : value),
+        z
+          .coerce.number({ invalid_type_error: 'NEXT_PUBLIC_PDF_MAX_MB must be a number' })
+          .positive('NEXT_PUBLIC_PDF_MAX_MB must be greater than 0')
+      )
+      .optional(),
     PRESIGN_TTL: z.coerce
       .number({ invalid_type_error: 'PRESIGN_TTL must be a number' })
       .positive('PRESIGN_TTL must be greater than 0')
@@ -78,6 +83,8 @@ export function loadEnv(customEnv: NodeJS.ProcessEnv = process.env) {
 
     const megabyte = 1024 * 1024;
 
+    const nextPublicPdfMax = parsed.NEXT_PUBLIC_PDF_MAX_MB ?? parsed.PDF_MAX_MB;
+
     return {
       NEXT_PUBLIC_API_URL: parsed.NEXT_PUBLIC_API_URL
         ? parsed.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
@@ -86,7 +93,7 @@ export function loadEnv(customEnv: NodeJS.ProcessEnv = process.env) {
       ALLOWED_ORIGINS_NORMALIZED: allowedOrigins.map(normalizeOrigin),
       PDF_MAX_MB: parsed.PDF_MAX_MB,
       PDF_MAX_BYTES: parsed.PDF_MAX_MB * megabyte,
-      NEXT_PUBLIC_PDF_MAX_MB: parsed.NEXT_PUBLIC_PDF_MAX_MB,
+      NEXT_PUBLIC_PDF_MAX_MB: nextPublicPdfMax,
       PRESIGN_TTL: parsed.PRESIGN_TTL,
       REGION: parsed.REGION,
       R2_S3_ENDPOINT: parsed.R2_S3_ENDPOINT.startsWith('http')
