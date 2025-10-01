@@ -14,6 +14,18 @@ class WorkerConfig(BaseSettings):
     features_t1_financial_detector: bool = True
     features_t1_financial_ml: bool = False
     features_t1_cas_phash: bool = True
+    features_t2_ocr: bool = False
+    ocr_provider: Optional[str] = None
+    ocr_page_timeout_ms: int = 60000
+    ocr_max_pages: int = 50
+    azure_di_endpoint: Optional[str] = None
+    azure_di_key: Optional[str] = None
+    aws_textract_region: Optional[str] = None
+    aws_access_key_id: Optional[str] = None
+    aws_secret_access_key: Optional[str] = None
+    ocr_tps_textract: Optional[float] = None
+    ocr_tps_azure: Optional[float] = None
+    ocr_circuit_open_secs: int = 60
     cas_normalize_pdf: bool = True
     phash_pages: int = 3
     phash_distance_max: int = 6
@@ -40,6 +52,18 @@ class WorkerConfig(BaseSettings):
             "features_t1_financial_detector": {"env": "FEATURES_T1_FINANCIAL_DETECTOR"},
             "features_t1_financial_ml": {"env": "FEATURES_T1_FINANCIAL_ML"},
             "features_t1_cas_phash": {"env": "FEATURES_T1_CAS_PHASH"},
+            "features_t2_ocr": {"env": "FEATURES_T2_OCR"},
+            "ocr_provider": {"env": "OCR_PROVIDER"},
+            "ocr_page_timeout_ms": {"env": "OCR_PAGE_TIMEOUT_MS"},
+            "ocr_max_pages": {"env": "OCR_MAX_PAGES"},
+            "azure_di_endpoint": {"env": "AZURE_DI_ENDPOINT"},
+            "azure_di_key": {"env": "AZURE_DI_KEY"},
+            "aws_textract_region": {"env": "AWS_TEXTRACT_REGION"},
+            "aws_access_key_id": {"env": "AWS_ACCESS_KEY_ID"},
+            "aws_secret_access_key": {"env": "AWS_SECRET_ACCESS_KEY"},
+            "ocr_tps_textract": {"env": "OCR_TPS_TEXTRACT"},
+            "ocr_tps_azure": {"env": "OCR_TPS_AZURE"},
+            "ocr_circuit_open_secs": {"env": "OCR_CIRCUIT_OPEN_SECS"},
             "cas_normalize_pdf": {"env": "CAS_NORMALIZE_PDF"},
             "redis_url": {"env": "REDIS_URL"},
             "rq_default_queue": {"env": "RQ_DEFAULT_QUEUE"},

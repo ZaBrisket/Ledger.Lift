@@ -18,6 +18,9 @@ dependencies = [
   "redis==5.0.1",
   "rq==1.15.1",
   "prometheus-client==0.20.0",
+  "requests==2.32.3",
+  "pdf2image==1.16.3",
+  "pytesseract==0.3.10",
 ]
 
 [project.optional-dependencies]
