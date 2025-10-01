@@ -15,9 +15,13 @@ class WorkerConfig(BaseSettings):
     features_t1_financial_ml: bool = False
     features_t1_cas_phash: bool = True
     features_t2_ocr: bool = False
+    features_t2_review_ui: bool = True
     ocr_provider: Optional[str] = None
+    ocr_provider_mode: str = "explicit"
     ocr_page_timeout_ms: int = 60000
     ocr_max_pages: int = 50
+    ocr_cost_per_page: int = 12
+    max_job_ocr_spend: Optional[int] = 240
     azure_di_endpoint: Optional[str] = None
     azure_di_key: Optional[str] = None
     aws_textract_region: Optional[str] = None
@@ -53,9 +57,13 @@ class WorkerConfig(BaseSettings):
             "features_t1_financial_ml": {"env": "FEATURES_T1_FINANCIAL_ML"},
             "features_t1_cas_phash": {"env": "FEATURES_T1_CAS_PHASH"},
             "features_t2_ocr": {"env": "FEATURES_T2_OCR"},
+            "features_t2_review_ui": {"env": "FEATURES_T2_REVIEW_UI"},
             "ocr_provider": {"env": "OCR_PROVIDER"},
+            "ocr_provider_mode": {"env": "OCR_PROVIDER_MODE"},
             "ocr_page_timeout_ms": {"env": "OCR_PAGE_TIMEOUT_MS"},
             "ocr_max_pages": {"env": "OCR_MAX_PAGES"},
+            "ocr_cost_per_page": {"env": "OCR_COST_PER_PAGE"},
+            "max_job_ocr_spend": {"env": "MAX_JOB_OCR_SPEND"},
             "azure_di_endpoint": {"env": "AZURE_DI_ENDPOINT"},
             "azure_di_key": {"env": "AZURE_DI_KEY"},
             "aws_textract_region": {"env": "AWS_TEXTRACT_REGION"},
