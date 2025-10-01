@@ -4,12 +4,17 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import List
 
 from apps.worker.config import WorkerConfig, settings
 
 from .rate_limit import CircuitBreaker, CircuitOpenError, RateLimiter
+from .select import (
+    auto_select_provider,
+    budget_allows_ocr,
+    estimate_job_spend,
+    resolve_provider_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +173,7 @@ def _ensure_page_limit(path: str, *, max_pages: int | None) -> None:
             )
 
 
-def _build_rate_limiter(config: WorkerConfig) -> RateLimiter | None:
-    provider = (config.ocr_provider or "").lower() if config.ocr_provider else None
+def _build_rate_limiter(config: WorkerConfig, provider: str) -> RateLimiter | None:
     rate: float | None = None
     if provider == "textract":
         rate = float(config.ocr_tps_textract or 0)
@@ -190,12 +194,7 @@ def _require_feature(config: WorkerConfig) -> None:
         raise OCRConfigurationError("T2 OCR feature flag is disabled")
 
 
-def _make_provider(config: WorkerConfig) -> OCRProvider:
-    provider = (config.ocr_provider or "").strip().lower()
-    if not provider:
-        raise OCRConfigurationError("OCR_PROVIDER must be set to azure, textract, or tesseract")
-    if provider not in {"azure", "textract", "tesseract"}:
-        raise OCRConfigurationError(f"Unsupported OCR provider: {provider}")
+def _make_provider(config: WorkerConfig, provider: str) -> OCRProvider:
     if provider == "azure":
         from .azure_layout import AzureLayoutOCRProvider
 
@@ -215,17 +214,27 @@ def _make_provider(config: WorkerConfig) -> OCRProvider:
             access_key=config.aws_access_key_id,
             secret_key=config.aws_secret_access_key,
         )
-    from .tesseract_local import TesseractLocalOCRProvider
+    if provider == "tesseract":
+        from .tesseract_local import TesseractLocalOCRProvider
 
-    return TesseractLocalOCRProvider()
+        return TesseractLocalOCRProvider()
+
+    raise OCRConfigurationError(f"Unsupported OCR provider: {provider}")
 
 
-@lru_cache
-def get_ocr_runtime(config: WorkerConfig | None = None) -> OCRRuntime:
+def get_ocr_runtime(
+    config: WorkerConfig | None = None,
+    *,
+    metadata: dict[str, object] | None = None,
+) -> OCRRuntime:
     resolved_config = config or settings
     _require_feature(resolved_config)
-    provider = _make_provider(resolved_config)
-    limiter = _build_rate_limiter(resolved_config)
+    try:
+        provider_name = resolve_provider_name(resolved_config, metadata=metadata)
+    except ValueError as exc:
+        raise OCRConfigurationError(str(exc)) from exc
+    provider = _make_provider(resolved_config, provider_name)
+    limiter = _build_rate_limiter(resolved_config, provider_name)
     breaker = _build_circuit_breaker(resolved_config)
     return OCRRuntime(
         provider,
@@ -247,4 +256,8 @@ __all__ = [
     "OCRRuntime",
     "get_ocr_runtime",
     "_parse_numeric_hint",
+    "auto_select_provider",
+    "budget_allows_ocr",
+    "estimate_job_spend",
+    "resolve_provider_name",
 ]
