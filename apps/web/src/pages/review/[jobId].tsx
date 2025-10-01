@@ -1,6 +1,6 @@
 import Head from 'next/head';
 import Link from 'next/link';
-import type { GetServerSideProps } from 'next';
+import { useRouter } from 'next/router';
 import { useMemo, useState } from 'react';
 
 type ScheduleReview = {
@@ -15,8 +15,13 @@ type ScheduleReview = {
 };
 
 export interface ReviewPageProps {
+  jobId?: string;
+  initialSchedules?: ScheduleReview[];
+}
+
+interface ManualReviewPageProps {
   jobId: string;
-  initialSchedules: ScheduleReview[];
+  initialSchedules?: ScheduleReview[];
 }
 
 const demoSchedules: ScheduleReview[] = [
@@ -74,7 +79,7 @@ const featureEnabled = () => {
   return raw.toLowerCase() !== 'false';
 };
 
-export const ManualReviewPage = ({ jobId, initialSchedules }: ReviewPageProps) => {
+export const ManualReviewPage = ({ jobId, initialSchedules = [] }: ManualReviewPageProps) => {
   const threshold = confidenceThreshold();
   const [schedules, setSchedules] = useState(() =>
     (initialSchedules.length > 0 ? initialSchedules : demoSchedules).map((schedule) => ({
@@ -321,17 +326,17 @@ export const ManualReviewPage = ({ jobId, initialSchedules }: ReviewPageProps) =
   );
 };
 
-const ReviewPage = (props: ReviewPageProps) => <ManualReviewPage {...props} />;
+const ReviewPage = (props: ReviewPageProps) => {
+  const router = useRouter();
+  const param = router.query.jobId;
+  const jobIdFromQuery = Array.isArray(param) ? param[0] : param;
 
-export const getServerSideProps: GetServerSideProps<ReviewPageProps> = async ({ params }) => {
-  const rawId = params?.jobId;
-  const jobId = Array.isArray(rawId) ? rawId[0] : rawId ?? 'preview';
-  return {
-    props: {
-      jobId,
-      initialSchedules: demoSchedules,
-    },
-  };
+  return (
+    <ManualReviewPage
+      jobId={props.jobId ?? jobIdFromQuery ?? 'preview'}
+      initialSchedules={props.initialSchedules ?? demoSchedules}
+    />
+  );
 };
 
 export default ReviewPage;
