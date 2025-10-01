@@ -20,6 +20,7 @@ def test_validate_numeric_table_detects_total_mismatch() -> None:
 
     result = validate_numeric_table(table)
     assert any(issue.code == "total.mismatch" for issue in result.issues)
+    assert any(issue.severity == "error" for issue in result.issues)
     assert result.low_confidence
 
 

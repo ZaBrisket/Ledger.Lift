@@ -36,6 +36,7 @@ describe('ManualReviewPage', () => {
     expect(markup).toContain('Manual review');
     expect(markup).toContain('Revenue Schedule');
     expect(markup).toContain('Average confidence');
+    expect(markup).toContain('Select All High Confidence');
   });
 
   it('disables export button when nothing is included', () => {

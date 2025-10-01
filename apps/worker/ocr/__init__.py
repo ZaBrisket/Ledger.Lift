@@ -10,10 +10,13 @@ from apps.worker.config import WorkerConfig, settings
 
 from .rate_limit import CircuitBreaker, CircuitOpenError, RateLimiter
 from .select import (
+    DocumentTraits,
+    ProviderDecision,
     auto_select_provider,
     budget_allows_ocr,
     estimate_job_spend,
     resolve_provider_name,
+    select_provider,
 )
 
 logger = logging.getLogger(__name__)
@@ -230,13 +233,13 @@ def get_ocr_runtime(
     resolved_config = config or settings
     _require_feature(resolved_config)
     try:
-        provider_name = resolve_provider_name(resolved_config, metadata=metadata)
+        provider_name, decision = resolve_provider_name(resolved_config, metadata=metadata)
     except ValueError as exc:
         raise OCRConfigurationError(str(exc)) from exc
     provider = _make_provider(resolved_config, provider_name)
     limiter = _build_rate_limiter(resolved_config, provider_name)
     breaker = _build_circuit_breaker(resolved_config)
-    return OCRRuntime(
+    runtime = OCRRuntime(
         provider,
         rate_limiter=limiter,
         circuit_breaker=breaker,
@@ -244,6 +247,9 @@ def get_ocr_runtime(
         backoff_initial=1.0,
         backoff_max=resolved_config.ocr_circuit_open_secs or 60,
     )
+    if decision is not None:
+        setattr(runtime, "provider_decision", decision)
+    return runtime
 
 
 __all__ = [
@@ -256,8 +262,11 @@ __all__ = [
     "OCRRuntime",
     "get_ocr_runtime",
     "_parse_numeric_hint",
+    "DocumentTraits",
+    "ProviderDecision",
     "auto_select_provider",
     "budget_allows_ocr",
     "estimate_job_spend",
     "resolve_provider_name",
+    "select_provider",
 ]

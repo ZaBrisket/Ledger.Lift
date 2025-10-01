@@ -1,9 +1,14 @@
 """Numeric table validators for financial schedules."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List, Optional, Sequence
+import os
 import re
+from dataclasses import dataclass
+from typing import List, Literal, Optional, Sequence
+
+REVIEW_CONFIDENCE_THRESHOLD = float(
+    os.getenv("REVIEW_CONFIDENCE_THRESHOLD", "0.6")
+)
 
 TOTAL_KEYWORDS = {
     "total",
@@ -34,6 +39,7 @@ class ValidationIssue:
     column: Optional[int] = None
     expected: Optional[float] = None
     actual: Optional[float] = None
+    severity: Literal["critical", "error", "warning", "info"] = "error"
 
 
 @dataclass
@@ -45,10 +51,9 @@ class TableValidationResult:
 
     @property
     def low_confidence(self) -> bool:
-        return self.confidence < 0.6 or any(
-            issue.code.startswith("total") or issue.code.startswith("reasonableness")
-            for issue in self.issues
-        )
+        if self.confidence < REVIEW_CONFIDENCE_THRESHOLD:
+            return True
+        return any(issue.severity in {"critical", "error"} for issue in self.issues)
 
 
 def _coerce_numeric(token: Optional[str]) -> ParsedCell:
@@ -159,6 +164,7 @@ def _validate_totals(rows: Sequence[Sequence[ParsedCell]]) -> List[ValidationIss
                             column=column,
                             expected=expected,
                             actual=cell.value,
+                            severity="error",
                         )
                     )
     return issues
@@ -198,6 +204,7 @@ def _validate_reasonableness(rows: Sequence[Sequence[ParsedCell]]) -> List[Valid
                         column=column,
                         expected=expected,
                         actual=g_cell.value,
+                        severity="error",
                     )
                 )
         return issues

@@ -59,6 +59,15 @@ const formatCurrency = (value: number) =>
 
 const formatConfidence = (value: number) => `${Math.round(value * 100)}%`;
 
+const confidenceThreshold = () => {
+  const raw =
+    process.env.NEXT_PUBLIC_REVIEW_CONFIDENCE_THRESHOLD ??
+    process.env.REVIEW_CONFIDENCE_THRESHOLD ??
+    '0.6';
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 0.6;
+};
+
 const featureEnabled = () => {
   const raw =
     (process.env.NEXT_PUBLIC_FEATURES_T2_REVIEW_UI ?? process.env.FEATURES_T2_REVIEW_UI ?? 'true').toString();
@@ -66,6 +75,7 @@ const featureEnabled = () => {
 };
 
 export const ManualReviewPage = ({ jobId, initialSchedules }: ReviewPageProps) => {
+  const threshold = confidenceThreshold();
   const [schedules, setSchedules] = useState(() =>
     (initialSchedules.length > 0 ? initialSchedules : demoSchedules).map((schedule) => ({
       ...schedule,
@@ -82,8 +92,8 @@ export const ManualReviewPage = ({ jobId, initialSchedules }: ReviewPageProps) =
   }, [schedules]);
 
   const reviewRequired = useMemo(
-    () => schedules.some((schedule) => schedule.confidence < 0.6 || schedule.issues.length > 0),
-    [schedules],
+    () => schedules.some((schedule) => schedule.confidence < threshold || schedule.issues.length > 0),
+    [schedules, threshold],
   );
 
   const includedCount = useMemo(() => schedules.filter((schedule) => schedule.include).length, [schedules]);
@@ -110,6 +120,26 @@ export const ManualReviewPage = ({ jobId, initialSchedules }: ReviewPageProps) =
     setSchedules((current) =>
       current.map((schedule) =>
         schedule.id === id ? { ...schedule, include: !schedule.include } : schedule,
+      ),
+    );
+  };
+
+  const selectHighConfidence = () => {
+    setSchedules((current) =>
+      current.map((schedule) =>
+        schedule.confidence >= threshold && schedule.issues.length === 0
+          ? { ...schedule, include: true }
+          : schedule,
+      ),
+    );
+  };
+
+  const deselectFlagged = () => {
+    setSchedules((current) =>
+      current.map((schedule) =>
+        schedule.confidence < threshold || schedule.issues.length > 0
+          ? { ...schedule, include: false }
+          : schedule,
       ),
     );
   };
@@ -157,6 +187,42 @@ export const ManualReviewPage = ({ jobId, initialSchedules }: ReviewPageProps) =
           </section>
         </header>
 
+        <div style={{
+          display: 'flex',
+          gap: 12,
+          marginBottom: 16,
+          flexWrap: 'wrap',
+        }}>
+          <button
+            type="button"
+            onClick={selectHighConfidence}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 4,
+              border: '1px solid #2563eb',
+              background: '#2563eb',
+              color: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Select All High Confidence
+          </button>
+          <button
+            type="button"
+            onClick={deselectFlagged}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 4,
+              border: '1px solid #b45309',
+              background: '#fff',
+              color: '#b45309',
+              cursor: 'pointer',
+            }}
+          >
+            Deselect All Flagged
+          </button>
+        </div>
+
         <div style={{ display: 'grid', gap: 20 }}>
           {schedules.map((schedule) => (
             <article
@@ -166,7 +232,7 @@ export const ManualReviewPage = ({ jobId, initialSchedules }: ReviewPageProps) =
                 borderRadius: 8,
                 padding: 20,
                 boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
-                background: schedule.confidence < 0.6 ? '#fff7ed' : '#fff',
+                background: schedule.confidence < threshold ? '#fff7ed' : '#fff',
               }}
             >
               <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
