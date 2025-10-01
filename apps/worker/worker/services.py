@@ -15,6 +15,13 @@ import pandas as pd
 from apps.worker.config import settings
 from apps.worker.financial import FinancialTableDetector, TableCandidate
 from apps.worker.services.cas import compute_pdf_hashes
+from apps.worker.services.cas_phash import (
+    ensure_phash_support,
+    compute_pdf_phashes,
+    find_duplicate_by_phash,
+    store_pdf_phashes,
+)
+from apps.worker.infra.redis import get_redis_connection
 from .database import WorkerDatabase
 from .aws_client import WorkerS3Client
 from .pipeline.render import render_pdf_preview
@@ -255,6 +262,7 @@ class DocumentProcessor:
                 except Exception as cas_error:
                     logger.warning('Failed to persist CAS hashes for %s: %s', doc_id, cas_error)
                 duplicate_doc = None
+                duplicate_reason = None
                 try:
                     duplicate_doc = self.db.find_document_by_hash(
                         sha_raw=cas_hashes.sha256_raw,
@@ -263,14 +271,71 @@ class DocumentProcessor:
                     )
                 except Exception as lookup_error:
                     logger.warning('CAS lookup failed for %s: %s', doc_id, lookup_error)
+                else:
+                    if duplicate_doc:
+                        duplicate_reason = 'cas'
+
+                phash_result = None
+                phash_connection = None
+                if settings.features_t1_cas_phash and not duplicate_doc:
+                    try:
+                        ensure_phash_support()
+                    except ImportError as dependency_error:
+                        logger.error('pHash dependencies unavailable for %s: %s', doc_id, dependency_error)
+                        processing_metadata['phash_check_failed'] = True
+                    else:
+                        try:
+                            phash_result = compute_pdf_phashes(
+                                pdf_content,
+                                max_pages=settings.phash_pages,
+                            )
+                            if phash_result.hashes:
+                                phash_connection = get_redis_connection()
+                                candidate_id = find_duplicate_by_phash(
+                                    phash_connection,
+                                    phash_result.hashes,
+                                    distance_max=settings.phash_distance_max,
+                                    exclude_document_id=doc_id,
+                                )
+                                if candidate_id:
+                                    try:
+                                        duplicate_doc = self.db.get_document(candidate_id)
+                                        if duplicate_doc:
+                                            duplicate_reason = 'phash'
+                                    except Exception as lookup_error:
+                                        logger.warning('Failed to load pHash duplicate %s: %s', candidate_id, lookup_error)
+                        except Exception as phash_error:
+                            logger.warning('pHash dedup failed for %s: %s', doc_id, phash_error)
+                            processing_metadata['phash_check_failed'] = True
+                            duplicate_doc = None
+                            duplicate_reason = None
+                            phash_result = None
+                            phash_connection = None
+
+                if settings.features_t1_cas_phash and phash_result and phash_result.hashes:
+                    processing_metadata['phash_hashes'] = list(phash_result.hashes)
+                    if phash_connection is None:
+                        try:
+                            phash_connection = get_redis_connection()
+                        except Exception as redis_error:
+                            logger.warning('Failed to open Redis for pHash storage on %s: %s', doc_id, redis_error)
+                            phash_connection = None
+                    if phash_connection is not None:
+                        try:
+                            store_pdf_phashes(phash_connection, doc_id, phash_result.hashes)
+                        except Exception as store_error:
+                            logger.warning('Failed to store pHashes for %s: %s', doc_id, store_error)
 
                 if duplicate_doc:
                     processing_metadata['stages_completed'].append('cas_dedup')
                     processing_metadata['cas_duplicate'] = True
+                    if duplicate_reason:
+                        processing_metadata['duplicate_reason'] = duplicate_reason
+                    message = 'CAS duplicate detected' if duplicate_reason != 'phash' else 'pHash duplicate detected'
                     self._log_event_safe(
                         doc_id,
                         EventType.PROCESSING_COMPLETED,
-                        'CAS duplicate detected',
+                        message,
                         {**processing_metadata, 'duplicate_of': duplicate_doc.id},
                     )
                     self._update_status_safe(doc_id, ProcessingStatus.COMPLETED, processing_metadata)
@@ -283,7 +348,8 @@ class DocumentProcessor:
                         'duplicate_of': duplicate_doc.id,
                     })
                     self._record_processing_stats(success=True, processing_time=processing_time)
-                    logger.info('CAS dedup hit for %s; matched %s', doc_id, duplicate_doc.id)
+                    reason_label = (duplicate_reason or 'cas').upper()
+                    logger.info('%s dedup hit for %s; matched %s', reason_label, doc_id, duplicate_doc.id)
                     return processing_metadata
 
                 # Stage 4: Create temporary file for processing

@@ -4,6 +4,8 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 import pandas as pd
 
+from apps.worker.config import settings
+
 try:
     import camelot
     import pdfplumber
@@ -132,17 +134,35 @@ def _extract_with_pdfplumber(pdf_path: str) -> List[Dict]:
         logger.debug(f"Extracting tables with pdfplumber from {pdf_path}")
         
         with pdfplumber.open(pdf_path) as pdf:
+            max_tables = max(settings.parser_max_schedules, 1)
+            max_empty = max(settings.parser_max_empty_pages, 1)
+            schedules_found = 0
+            empty_streak = 0
+
             for page_num, page in enumerate(pdf.pages, 1):
+                if schedules_found >= max_tables or empty_streak >= max_empty:
+                    logger.debug(
+                        "Early stop triggered at page %s (tables=%s, empty_streak=%s)",
+                        page_num,
+                        schedules_found,
+                        empty_streak,
+                    )
+                    break
+
                 page_tables = page.extract_tables()
-                
+                if not page_tables:
+                    empty_streak += 1
+                    continue
+
+                page_had_tables = False
                 for table_idx, table in enumerate(page_tables):
                     if table and len(table) > 0:
                         # Convert to DataFrame for consistency
                         df = pd.DataFrame(table[1:], columns=table[0] if table[0] else [])
-                        
+
                         # Clean up the dataframe
                         df = df.replace('', None).dropna(how='all').dropna(axis=1, how='all')
-                        
+
                         if not df.empty:
                             tables.append({
                                 'type': 'pdfplumber',
@@ -155,6 +175,15 @@ def _extract_with_pdfplumber(pdf_path: str) -> List[Dict]:
                                 'table_index': table_idx,
                                 'extraction_method': 'pdfplumber'
                             })
+                            schedules_found += 1
+                            page_had_tables = True
+                            if schedules_found >= max_tables:
+                                break
+
+                if page_had_tables:
+                    empty_streak = 0
+                else:
+                    empty_streak += 1
                             
     except Exception as e:
         logger.warning(f"Pdfplumber extraction failed: {e}")

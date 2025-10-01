@@ -1,14 +1,16 @@
-import { 
-  delay, 
-  ApiError, 
-  createApiError, 
-  isRetryableError, 
-  UploadProgress, 
-  uploadEvents, 
+import {
+  delay,
+  ApiError,
+  createApiError,
+  isRetryableError,
+  UploadProgress,
+  uploadEvents,
   calculateFileHash,
   generateRequestId,
   createCancellablePromise
 } from './utils';
+
+export type QueuePriority = 'high' | 'default' | 'low' | 'dead';
 
 /**
  * Circuit breaker states
@@ -65,6 +67,23 @@ class CircuitBreaker {
   getState(): CircuitState {
     return this.state;
   }
+}
+
+export interface QueueSnapshot {
+  name: string;
+  priority: QueuePriority;
+  size: number;
+  started: number;
+  scheduled: number;
+  failed: number;
+  finished: number;
+  deferred: number;
+}
+
+export interface QueueDashboard {
+  queues: QueueSnapshot[];
+  emergency_stop: boolean;
+  timestamp: string;
 }
 
 /**
@@ -384,13 +403,34 @@ class ApiClient {
         5000, // Shorter timeout for health checks
         1 // No retries for health checks
       );
-      
+
       const data = await response.json();
       return { success: true, data };
     } catch (error) {
-      const apiError = error instanceof ApiError ? error : 
+      const apiError = error instanceof ApiError ? error :
         createApiError('Health check failed', 'HEALTH_CHECK_ERROR');
-      
+
+      return { success: false, error: apiError };
+    }
+  }
+
+  async getQueueDashboard(): Promise<
+    { success: true; data: QueueDashboard } | { success: false; error: ApiError }
+  > {
+    try {
+      const response = await this.enhancedFetch(
+        `${this.baseUrl}/ops/queues`,
+        {},
+        10000,
+        2
+      );
+
+      const data = await response.json() as QueueDashboard;
+      return { success: true, data };
+    } catch (error) {
+      const apiError = error instanceof ApiError ? error :
+        createApiError('Failed to fetch queue snapshot', 'QUEUE_SNAPSHOT_ERROR');
+
       return { success: false, error: apiError };
     }
   }
