@@ -13,7 +13,12 @@ class WorkerConfig(BaseSettings):
     features_t1_queue: bool = True
     features_t1_financial_detector: bool = True
     features_t1_financial_ml: bool = False
+    features_t1_cas_phash: bool = True
     cas_normalize_pdf: bool = True
+    phash_pages: int = 3
+    phash_distance_max: int = 6
+    parser_max_schedules: int = 10
+    parser_max_empty_pages: int = 20
     redis_url: str = "redis://localhost:6379/0"
     rq_default_queue: str = "default"
     rq_high_queue: str = "high"
@@ -34,6 +39,7 @@ class WorkerConfig(BaseSettings):
             "features_t1_queue": {"env": "FEATURES_T1_QUEUE"},
             "features_t1_financial_detector": {"env": "FEATURES_T1_FINANCIAL_DETECTOR"},
             "features_t1_financial_ml": {"env": "FEATURES_T1_FINANCIAL_ML"},
+            "features_t1_cas_phash": {"env": "FEATURES_T1_CAS_PHASH"},
             "cas_normalize_pdf": {"env": "CAS_NORMALIZE_PDF"},
             "redis_url": {"env": "REDIS_URL"},
             "rq_default_queue": {"env": "RQ_DEFAULT_QUEUE"},
@@ -46,6 +52,10 @@ class WorkerConfig(BaseSettings):
             "metrics_auth": {"env": "METRICS_AUTH"},
             "emergency_stop_key": {"env": "EMERGENCY_STOP_KEY"},
             "job_progress_ttl_seconds": {"env": "JOB_PROGRESS_TTL_SECONDS"},
+            "phash_pages": {"env": "PHASH_PAGES"},
+            "phash_distance_max": {"env": "PHASH_DISTANCE_MAX"},
+            "parser_max_schedules": {"env": "PARSER_MAX_SCHEDULES"},
+            "parser_max_empty_pages": {"env": "PARSER_MAX_EMPTY_PAGES"},
         }
 
 

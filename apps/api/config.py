@@ -25,6 +25,7 @@ class APIConfig(BaseSettings):
     metrics_auth: Optional[str] = None
     job_progress_ttl_seconds: int = 3600
     emergency_stop_key: str = "EMERGENCY_STOP"
+    enable_ops_endpoints: bool = False
 
     class Config:
         env_file = ".env"
@@ -45,6 +46,7 @@ class APIConfig(BaseSettings):
             "parse_timeout_ms": {"env": "PARSE_TIMEOUT_MS"},
             "metrics_auth": {"env": "METRICS_AUTH"},
             "emergency_stop_key": {"env": "EMERGENCY_STOP_KEY"},
+            "enable_ops_endpoints": {"env": "ENABLE_OPS_ENDPOINTS"},
         }
 
 
