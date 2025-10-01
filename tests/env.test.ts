@@ -25,6 +25,16 @@ describe('environment configuration', () => {
     expect(env.NEXT_PUBLIC_API_URL).toBe('');
   });
 
+  it('defaults NEXT_PUBLIC_PDF_MAX_MB to PDF_MAX_MB when omitted', async () => {
+    const module = await loadModule<typeof import('../src/config/env')>(
+      '../src/config/env',
+      { NEXT_PUBLIC_PDF_MAX_MB: undefined }
+    );
+
+    const env = module.loadEnv();
+    expect(env.NEXT_PUBLIC_PDF_MAX_MB).toBe(env.PDF_MAX_MB);
+  });
+
   it('fails fast when allowed origins are missing', async () => {
     await expect(
       loadModule('../src/config/env', { ALLOWED_ORIGINS: '' })
