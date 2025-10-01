@@ -2,11 +2,25 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 
-import boto3
-from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ClientError
+try:
+    import boto3
+    from boto3.session import Session as Boto3Session
+    from botocore.config import Config
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    BOTO3_AVAILABLE = True
+except ImportError:
+    BOTO3_AVAILABLE = False
+    boto3 = None  # type: ignore[assignment]
+    Config = None  # type: ignore[assignment]
+    BotoCoreError = Exception  # type: ignore[assignment]
+    ClientError = Exception  # type: ignore[assignment]
+    Boto3Session = Any  # type: ignore[assignment]
+
+if TYPE_CHECKING and not BOTO3_AVAILABLE:  # pragma: no cover - typing aid
+    from boto3.session import Session as Boto3Session  # type: ignore
 
 from . import OCRCell, OCRConfigurationError, OCRRateLimitError, _parse_numeric_hint
 
@@ -24,8 +38,10 @@ class AWSTextractOCRProvider:
         region: str,
         access_key: str | None = None,
         secret_key: str | None = None,
-        session: boto3.session.Session | None = None,
+        session: Boto3Session | None = None,
     ) -> None:
+        if not BOTO3_AVAILABLE:
+            raise OCRConfigurationError("boto3 is required for the Textract provider")
         if not region:
             raise OCRConfigurationError("AWS_TEXTRACT_REGION is required")
         self._region = region
@@ -65,7 +81,7 @@ class AWSTextractOCRProvider:
             raise RuntimeError(f"Textract invocation failed: {exc}") from exc
 
         blocks = response.get("Blocks", [])
-        block_map: Dict[str, Dict] = {block["Id"]: block for block in blocks if "Id" in block}
+        block_map: Dict[str, Dict] = {block.get("Id"): block for block in blocks if block.get("Id")}
         cells: List[OCRCell] = []
         for block in blocks:
             if block.get("BlockType") != "CELL":

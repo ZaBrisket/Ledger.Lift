@@ -90,12 +90,13 @@ class AzureLayoutOCRProvider:
         deadline = time.time() + timeout_seconds
         backoff = 1.0
         while True:
-            if time.time() > deadline:
+            remaining = deadline - time.time()
+            if remaining <= 0:
                 raise OCRTimeoutError("Azure Document Intelligence operation timed out")
             response = self._session.get(
                 url,
                 headers={"Ocp-Apim-Subscription-Key": self._api_key},
-                timeout=min(backoff, timeout_seconds),
+                timeout=min(backoff, max(0.1, remaining)),
             )
             if response.status_code == 429:
                 retry_after = _safe_retry_after(response.headers)
@@ -107,7 +108,10 @@ class AzureLayoutOCRProvider:
                 return data
             if status == "failed":
                 raise RuntimeError("Azure Document Intelligence analysis failed")
-            time.sleep(backoff)
+            sleep_for = min(backoff, max(0.1, deadline - time.time()))
+            if sleep_for <= 0:
+                raise OCRTimeoutError("Azure Document Intelligence operation timed out")
+            time.sleep(sleep_for)
             backoff = min(backoff * 2, 15.0)
 
 

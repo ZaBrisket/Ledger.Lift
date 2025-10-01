@@ -62,18 +62,17 @@ class OCRProvider:
 
 
 def _parse_numeric_hint(text: str) -> tuple[bool, float | None]:
-    cleaned = text.strip()
+    cleaned = text.strip().replace(",", "")
     if not cleaned:
         return False, None
-    cleaned = cleaned.replace(",", "")
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        cleaned = f"-{cleaned[1:-1]}"
     if cleaned.endswith("%"):
         try:
             value = float(cleaned[:-1]) / 100
             return True, value
         except ValueError:
             return False, None
-    if cleaned.startswith("(") and cleaned.endswith(")"):
-        cleaned = f"-{cleaned[1:-1]}"
     try:
         return True, float(cleaned)
     except ValueError:
