@@ -252,9 +252,18 @@ def resolve_provider_name(
 
     for candidate in ordered_candidates:
         resolved = _prefer_available_provider(candidate, config=config)
+        if resolved != candidate:
+            logger.info(
+                "ocr_provider_fallback",
+                extra={"requested": candidate, "fallback": resolved},
+            )
         if resolved in ALLOWED_PROVIDERS:
             return resolved, decision
 
+    logger.error(
+        "ocr_provider_all_unavailable",
+        extra={"attempted": ordered_candidates},
+    )
     return "tesseract", decision
 
 

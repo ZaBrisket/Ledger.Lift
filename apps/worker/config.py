@@ -21,7 +21,7 @@ class WorkerConfig(BaseSettings):
     ocr_page_timeout_ms: int = 60000
     ocr_max_pages: int = 50
     ocr_cost_per_page_cents: int = 0
-    max_job_ocr_spend_cents: int = 0
+    max_job_ocr_spend_cents: int = 240
     azure_di_endpoint: Optional[str] = None
     azure_di_key: Optional[str] = None
     aws_textract_region: Optional[str] = None
