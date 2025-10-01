@@ -25,6 +25,30 @@ describe('environment configuration', () => {
     expect(env.NEXT_PUBLIC_API_URL).toBe('');
   });
 
+  it('falls back to PDF_MAX_MB when NEXT_PUBLIC_PDF_MAX_MB is missing', async () => {
+    const module = await loadModule<typeof import('../src/config/env')>(
+      '../src/config/env',
+      { NEXT_PUBLIC_PDF_MAX_MB: undefined }
+    );
+
+    const env = module.loadEnv();
+    expect(env.NEXT_PUBLIC_PDF_MAX_MB).toBe(env.PDF_MAX_MB);
+  });
+
+  it('defaults optional feature flags to false', async () => {
+    const module = await loadModule<typeof import('../src/config/env')>(
+      '../src/config/env',
+      {
+        FEATURES_T1_QUEUE: undefined,
+        FEATURES_T2_OCR: undefined,
+        FEATURES_T3_AUDIT: undefined,
+      }
+    );
+
+    const env = module.loadEnv();
+    expect(env.FEATURES).toEqual({ T1_QUEUE: false, T2_OCR: false, T3_AUDIT: false });
+  });
+
   it('fails fast when allowed origins are missing', async () => {
     await expect(
       loadModule('../src/config/env', { ALLOWED_ORIGINS: '' })
