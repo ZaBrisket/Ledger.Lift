@@ -50,8 +50,14 @@ class AuditBatcher:
     async def add_event(self, job_id: UUID, event_type:str, trace_id:Optional[UUID]=None, user_id:Optional[str]=None, ip_address:Optional[str]=None, metadata:Optional[Dict[str,Any]]=None)->bool:
         ts = datetime.now(timezone.utc)
         event = {
-            "id": uuid.uuid4(), "job_id": job_id, "event_type": event_type, "trace_id": trace_id,
-            "user_id": user_id, "ip_address": ip_address, "metadata": metadata or {}, "created_at": ts,
+            "id": uuid.uuid4(),
+            "job_id": job_id,
+            "event_type": event_type,
+            "trace_id": str(trace_id) if trace_id else None,
+            "user_id": user_id,
+            "ip_address": ip_address,
+            "metadata": metadata or {},
+            "created_at": ts,
         }
         event["idempotency_key"] = _idk(job_id, event_type, trace_id, user_id, ip_address, event["metadata"], ts)
 
@@ -88,10 +94,15 @@ class AuditBatcher:
                 batch.append(self.queue.popleft())
         if not batch: return
         try:
-            from apps.api.app.database import get_db_session
+            from apps.api.app.db import get_db_session
             async with get_db_session() as s:
-                stmt = pg_insert(AuditEvent.__table__).values(batch).on_conflict_do_nothing(constraint="uq_audit_idempotency")
-                await s.execute(stmt); await s.commit()
+                stmt = (
+                    pg_insert(AuditEvent.__table__)
+                    .values(batch)
+                    .on_conflict_do_nothing(index_elements=[AuditEvent.idempotency_key])
+                )
+                await s.execute(stmt)
+                await s.commit()
         except Exception:
             logger.exception("failed to flush audit batch; requeue")
             async with self.lock: self.queue.extendleft(reversed(batch))
@@ -107,9 +118,14 @@ async def log_audit_event(**kw)->bool:
     return await get_audit_batcher().add_event(**kw)
 
 async def get_audit_trail(job_id: UUID, limit:int=100)->List[Dict[str,Any]]:
-    from apps.api.app.database import get_db_session
+    from apps.api.app.db import get_db_session
     async with get_db_session() as s:
-        res = await s.execute(select(AuditEvent).where(AuditEvent.job_id==job_id).order_by(AuditEvent.created_at).limit(limit))
+        res = await s.execute(
+            select(AuditEvent)
+            .where(AuditEvent.job_id == job_id)
+            .order_by(AuditEvent.created_at)
+            .limit(limit)
+        )
         out=[]
         for e in res.scalars().all():
             out.append({"id":str(e.id),"event_type":e.event_type,"user_id":e.user_id,"ip_address":e.ip_address,"trace_id":str(e.trace_id) if e.trace_id else None,"metadata":e.metadata,"created_at":e.created_at.isoformat()})

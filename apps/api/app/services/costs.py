@@ -12,14 +12,14 @@ log=logging.getLogger(__name__)
 async def record_ocr_cost(job_id: UUID, user_id: Optional[str], provider:str, pages:int, cost_per_page_cents:int)->UUID:
     cost = pages*cost_per_page_cents
     if cost > settings.max_job_cost_cents: raise ValueError("Estimated OCR cost exceeds limit")
-    from apps.api.app.database import get_db_session
+    from apps.api.app.db import get_db_session
     async with get_db_session() as s:
         rec = CostRecord(job_id=job_id,user_id=user_id,provider=provider,pages=pages,cost_cents=cost,status='PENDING',created_at=datetime.now(timezone.utc))
         s.add(rec); await s.commit(); await s.refresh(rec)
         return rec.id
 
 async def mark_cost_completed(record_id: UUID, success: bool=True):
-    from apps.api.app.database import get_db_session
+    from apps.api.app.db import get_db_session
     async with get_db_session() as s:
         res=await s.execute(select(CostRecord).where(CostRecord.id==record_id))
         rec=res.scalar_one_or_none()
@@ -28,7 +28,7 @@ async def mark_cost_completed(record_id: UUID, success: bool=True):
             rec.completed_at=datetime.now(timezone.utc); await s.commit()
 
 async def get_user_costs(user_id: str)->Dict[str,Any]:
-    from apps.api.app.database import get_db_session
+    from apps.api.app.db import get_db_session
     async with get_db_session() as s:
         stmt=select(func.sum(CostRecord.cost_cents).label('tc'), func.sum(CostRecord.pages).label('tp'), func.count(CostRecord.id).label('tj')).where(CostRecord.user_id==user_id, CostRecord.status=='COMPLETED')
         row=(await s.execute(stmt)).one()
@@ -37,7 +37,7 @@ async def get_user_costs(user_id: str)->Dict[str,Any]:
 
 async def reconcile_costs()->Dict[str,Any]:
     cutoff=datetime.now(timezone.utc)-timedelta(minutes=5)
-    from apps.api.app.database import get_db_session
+    from apps.api.app.db import get_db_session
     async with get_db_session() as s:
         res=await s.execute(select(CostRecord).where(CostRecord.status=='PENDING', CostRecord.created_at < cutoff))
         stale=res.scalars().all()
