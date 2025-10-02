@@ -221,7 +221,15 @@ def create_tables():
     """Create database tables if they don't exist."""
     try:
         # Import models inside function to avoid circular imports
-        from .models import Document, Page, ProcessingEvent, Artifact  # noqa
+        from .models import (
+            Document,
+            Page,
+            ProcessingEvent,
+            Artifact,
+            AuditEvent,
+            CostRecord,
+            JobSchedule,
+        )  # noqa: F401
         Base.metadata.create_all(bind=db_manager.engine)
         logger.info("Database tables created successfully")
     except Exception as e:

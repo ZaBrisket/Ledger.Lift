@@ -11,7 +11,7 @@ router = APIRouter(prefix="/v1/jobs", tags=["jobs"])
 
 @router.get("/{job_id}/schedules")
 async def get_schedules(job_id: UUID)->Dict[str,Any]:
-    from apps.api.app.database import get_db_session
+    from apps.api.app.db import get_db_session
     async with get_db_session() as s:
         res=await s.execute(select(JobSchedule).where(JobSchedule.job_id==job_id).order_by(JobSchedule.created_at))
         rows=res.scalars().all()
@@ -36,7 +36,7 @@ async def export_selected(job_id: UUID, payload: Dict[str, Any])->StreamingRespo
         raise HTTPException(status_code=500, detail="openpyxl not installed on API")
     
     sel = set(payload.get("selectedScheduleIds") or [])
-    from apps.api.app.database import get_db_session
+    from apps.api.app.db import get_db_session
     async with get_db_session() as s:
         res=await s.execute(select(JobSchedule).where(JobSchedule.job_id==job_id))
         rows=[r for r in res.scalars().all() if str(r.id) in sel] if sel else []

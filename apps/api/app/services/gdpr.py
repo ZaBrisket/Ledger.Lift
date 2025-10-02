@@ -23,7 +23,7 @@ async def _artifacts(job)->List[Dict[str,str]]:
     return out
 
 async def initiate_job_deletion(job_id: UUID, user_id: Optional[str]=None, trace_id: Optional[UUID]=None)->Dict[str,Any]:
-    from apps.api.app.database import get_db_session
+    from apps.api.app.db import get_db_session
     async with get_db_session() as s:
         from sqlalchemy import text
         res=await s.execute(text("SELECT id, status, source_key, processed_key, export_key, bucket FROM jobs WHERE id = :id FOR UPDATE"), {"id": str(job_id)})
@@ -59,7 +59,7 @@ async def initiate_job_deletion(job_id: UUID, user_id: Optional[str]=None, trace
 async def _execute_deletion(job_id: UUID, max_retries:int=3):
     for attempt in range(max_retries):
         try:
-            from apps.api.app.database import get_db_session
+            from apps.api.app.db import get_db_session
             async with get_db_session() as s:
                 from sqlalchemy import text
                 res=await s.execute(text("SELECT deletion_manifest FROM jobs WHERE id = :id"), {"id": str(job_id)})
@@ -99,7 +99,7 @@ async def _execute_deletion(job_id: UUID, max_retries:int=3):
             if attempt < max_retries-1: await asyncio.sleep(2**attempt)
 
 async def sweep_stale_deletions():
-    from apps.api.app.database import get_db_session
+    from apps.api.app.db import get_db_session
     async with get_db_session() as s:
         from sqlalchemy import text
         res=await s.execute(text("SELECT id FROM jobs WHERE deletion_manifest IS NOT NULL"))
