@@ -1,4 +1,5 @@
 import asyncio, logging
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from uuid import UUID
@@ -8,6 +9,12 @@ from apps.api.app.models.costs import CostRecord
 from apps.api.app.services.audit import log_audit_event, AuditEventType
 
 log = logging.getLogger(__name__)
+
+
+def _db_session():
+    from apps.api.app.db import get_db_session
+
+    return contextmanager(get_db_session)()
 
 class ManifestStatus: 
     PENDING="PENDING"
@@ -23,16 +30,15 @@ async def _artifacts(job)->List[Dict[str,str]]:
     return out
 
 async def initiate_job_deletion(job_id: UUID, user_id: Optional[str]=None, trace_id: Optional[UUID]=None)->Dict[str,Any]:
-    from apps.api.app.db import get_db_session
-    async with get_db_session() as s:
+    with _db_session() as s:
         from sqlalchemy import text
-        res=await s.execute(text("SELECT id, status, source_key, processed_key, export_key, bucket FROM jobs WHERE id = :id FOR UPDATE"), {"id": str(job_id)})
+        res=s.execute(text("SELECT id, status, source_key, processed_key, export_key, bucket FROM jobs WHERE id = :id FOR UPDATE"), {"id": str(job_id)})
         job=res.mappings().first()
         if not job: return {"success":False,"error":"Job not found"}
-        
+
         # Cancel if processing
         if job.get("status") in ("QUEUED","PROCESSING"):
-            await s.execute(text("UPDATE jobs SET cancellation_requested = true WHERE id = :id"), {"id": str(job_id)})
+            s.execute(text("UPDATE jobs SET cancellation_requested = true WHERE id = :id"), {"id": str(job_id)})
         
         # Create manifest
         artifacts = []
@@ -48,9 +54,9 @@ async def initiate_job_deletion(job_id: UUID, user_id: Optional[str]=None, trace
             "status":ManifestStatus.PENDING
         }
         
-        await s.execute(text("UPDATE jobs SET deletion_manifest = :manifest WHERE id = :id"), 
-                       {"manifest": str(manifest).replace("'", '"'), "id": str(job_id)})
-        await s.commit()
+        s.execute(text("UPDATE jobs SET deletion_manifest = :manifest WHERE id = :id"),
+                   {"manifest": str(manifest).replace("'", '"'), "id": str(job_id)})
+        s.commit()
     
     await log_audit_event(job_id=job_id,event_type=AuditEventType.DELETION_REQUESTED,trace_id=trace_id,user_id=user_id,metadata={"manifest_created":True})
     asyncio.create_task(_execute_deletion(job_id))
@@ -59,10 +65,9 @@ async def initiate_job_deletion(job_id: UUID, user_id: Optional[str]=None, trace
 async def _execute_deletion(job_id: UUID, max_retries:int=3):
     for attempt in range(max_retries):
         try:
-            from apps.api.app.db import get_db_session
-            async with get_db_session() as s:
+            with _db_session() as s:
                 from sqlalchemy import text
-                res=await s.execute(text("SELECT deletion_manifest FROM jobs WHERE id = :id"), {"id": str(job_id)})
+                res=s.execute(text("SELECT deletion_manifest FROM jobs WHERE id = :id"), {"id": str(job_id)})
                 row=res.first()
                 if not row or not row[0]: return
                 
@@ -81,27 +86,26 @@ async def _execute_deletion(job_id: UUID, max_retries:int=3):
                         failed.append(a)
                 
                 if not failed:
-                    await s.execute(delete(CostRecord).where(CostRecord.job_id==job_id))
-                    await s.execute(text("DELETE FROM jobs WHERE id = :id"), {"id": str(job_id)})
-                    await s.commit()
+                    s.execute(delete(CostRecord).where(CostRecord.job_id==job_id))
+                    s.execute(text("DELETE FROM jobs WHERE id = :id"), {"id": str(job_id)})
+                    s.commit()
                     await log_audit_event(job_id=job_id,event_type=AuditEventType.DELETION_COMPLETED,metadata={"artifacts_deleted":len(m.get("artifacts",[]))})
                     return
                 else:
                     m["artifacts"]=failed
                     m["status"]=ManifestStatus.FAILED
                     m["last_attempt"]=datetime.now(timezone.utc).isoformat()
-                    await s.execute(text("UPDATE jobs SET deletion_manifest = :manifest WHERE id = :id"),
-                                  {"manifest": json.dumps(m), "id": str(job_id)})
-                    await s.commit()
+                    s.execute(text("UPDATE jobs SET deletion_manifest = :manifest WHERE id = :id"),
+                              {"manifest": json.dumps(m), "id": str(job_id)})
+                    s.commit()
                     if attempt < max_retries-1: await asyncio.sleep(2**attempt)
         except Exception:
             log.exception("deletion attempt %s failed",attempt+1)
             if attempt < max_retries-1: await asyncio.sleep(2**attempt)
 
 async def sweep_stale_deletions():
-    from apps.api.app.db import get_db_session
-    async with get_db_session() as s:
+    with _db_session() as s:
         from sqlalchemy import text
-        res=await s.execute(text("SELECT id FROM jobs WHERE deletion_manifest IS NOT NULL"))
+        res=s.execute(text("SELECT id FROM jobs WHERE deletion_manifest IS NOT NULL"))
         for row in res:
             asyncio.create_task(_execute_deletion(UUID(str(row[0]))))

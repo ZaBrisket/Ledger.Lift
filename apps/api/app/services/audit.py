@@ -1,4 +1,5 @@
 import asyncio, hashlib, json, logging, uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from uuid import UUID
@@ -10,6 +11,13 @@ from apps.api.app.config_t3 import settings
 from apps.api.app.models.audit import AuditEvent
 
 logger = logging.getLogger(__name__)
+
+
+def _db_session():
+    from apps.api.app.db import get_db_session
+
+    return contextmanager(get_db_session)()
+
 
 class AuditEventType:
     ENQUEUED="ENQUEUED"; STARTED="STARTED"; EXTRACTED="EXTRACTED"; EXPORTED="EXPORTED"
@@ -94,15 +102,14 @@ class AuditBatcher:
                 batch.append(self.queue.popleft())
         if not batch: return
         try:
-            from apps.api.app.db import get_db_session
-            async with get_db_session() as s:
+            with _db_session() as s:
                 stmt = (
                     pg_insert(AuditEvent.__table__)
                     .values(batch)
                     .on_conflict_do_nothing(index_elements=[AuditEvent.idempotency_key])
                 )
-                await s.execute(stmt)
-                await s.commit()
+                s.execute(stmt)
+                s.commit()
         except Exception:
             logger.exception("failed to flush audit batch; requeue")
             async with self.lock: self.queue.extendleft(reversed(batch))
@@ -118,9 +125,8 @@ async def log_audit_event(**kw)->bool:
     return await get_audit_batcher().add_event(**kw)
 
 async def get_audit_trail(job_id: UUID, limit:int=100)->List[Dict[str,Any]]:
-    from apps.api.app.db import get_db_session
-    async with get_db_session() as s:
-        res = await s.execute(
+    with _db_session() as s:
+        res = s.execute(
             select(AuditEvent)
             .where(AuditEvent.job_id == job_id)
             .order_by(AuditEvent.created_at)
