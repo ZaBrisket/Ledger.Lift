@@ -1,21 +1,23 @@
-[build]
-base = "."
-command = "pnpm -w install && pnpm --filter web build"
-publish = "apps/web/out"
-
-[[plugins]]
-package = "@netlify/plugin-nextjs"
-
-[build.environment]
-NODE_VERSION = "18"
-NEXT_TELEMETRY_DISABLED = "1"
-
-[functions]
-directory = "netlify/functions"
-node_bundler = "esbuild"
+[[redirects]]
+  from = "/api/jobs/:jobId/audit"
+  to = "/.netlify/functions/get-audit-trail?jobId=:jobId"
+  status = 200
 
 [[redirects]]
-from = "/api/*"
-to = "/.netlify/functions/:splat"
-status = 200
-force = true
+  from = "/api/jobs/:jobId/delete"
+  to = "/.netlify/functions/delete-job"
+  status = 200
+
+[[redirects]]
+  from = "/api/jobs/:jobId/schedules"
+  to = "/.netlify/functions/get-job-schedules?jobId=:jobId"
+  status = 200
+
+[[redirects]]
+  from = "/api/jobs/:jobId/export"
+  to = "/.netlify/functions/export-job?jobId=:jobId"
+  status = 200
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pg"]
